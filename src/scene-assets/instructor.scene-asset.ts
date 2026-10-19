@@ -68,18 +68,19 @@ for (const side of [1, -1]) {
   ], 10)), `${name}Sleeve`, materials.shirt, skeleton, rigidWeight(arm)));
   const leg = left ? B.LeftUpperLeg : B.RightUpperLeg, knee = leg + 1, foot = leg + 2;
   const trouser = profile([
-    { y: -.03, w: .062, d: .058 }, { y: .04, w: .08, d: .072 }, { y: .11, w: .092, d: .08 },
+    // Narrow above the shirt hem (hidden): the top swings with the opening leg.
+    { y: -.03, w: .04, d: .045 }, { y: .03, w: .055, d: .058 }, { y: .1, w: .088, d: .078 },
     { y: .23, w: .084, d: .072 }, { y: .34, w: .074, d: .064 },
     { y: .39, w: .071, d: .061 }, { y: .43, w: .075, d: .062 },
     { y: .54, w: .07, d: .06 }, { y: .66, w: .064, d: .054 },
     { y: .69, w: .059, d: .062 }, { y: .725, w: .06, d: .064 },
   ], 10).rotateZ(Math.PI).translate(side * .1, .86, 0);
   const legWeights = limbWeight(side * .1, .86, 0, -1, leg, knee, foot, P.thigh, P.shin);
-  // Above the shirt hem the trouser moves with the pelvis, so a swinging thigh can never
-  // cut through the shirt; it blends into the thigh over the 9 cm below the hem.
+  // Up to the shirt hem the trouser moves with the pelvis, so it never cuts through the shirt;
+  // below it the thigh takes over across 24 cm. A shorter blend sheared the thigh into a
+  // shelf whenever the leg opened sideways.
   instructor.add(skin(trouser, `${name}TrouserLeg`, materials.pants, skeleton, (x, y) => {
-    if (y >= .755) return [B.Hips, B.Hips, 0];
-    if (y >= .655) { const t = (.755 - y) / .1; return [B.Hips, leg, t * t * (3 - 2 * t)]; }
+    if (y >= .55) { const t = Math.min(1, Math.max(0, (.79 - y) / .24)); return [B.Hips, leg, t * t * (3 - 2 * t)]; }
     return legWeights(x, y);
   }));
   const shoe = new Mesh(profile([
