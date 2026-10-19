@@ -162,6 +162,20 @@ def twist_angle(au, n, ref):
     return np.arctan2(np.sum(n * e2, -1), np.sum(n * e1, -1)), e1, e2
 
 
+def foreshorten(v, depth_axis):
+    """Bone vectors whose depth size comes from image foreshortening, not the pose model.
+
+    A bone has one fixed length, so its on-screen length fixes how far it points toward or
+    away from the camera. The model's depth regularly jumps between two 3D guesses while the
+    image does not change; only its sign is kept (resolve_depth then settles the sign)."""
+    z = v @ depth_axis
+    plane = v - z[:, None] * depth_axis
+    l2 = np.linalg.norm(plane, axis=-1)
+    length = max(float(np.median(np.linalg.norm(v, axis=-1))), float(np.percentile(l2, 97)))
+    depth = np.sqrt(np.clip(length ** 2 - l2 ** 2, 0, None))
+    return plane + (np.where(z < 0, -1, 1) * depth)[:, None] * depth_axis
+
+
 def resolve_depth(a, f, ref, depth_axis, w, forward=None):
     """Per-frame depth signs of both bones (Viterbi over 4 states: each as measured or mirrored).
 
@@ -308,8 +322,9 @@ def solve_shot(img, wld, s, framing, pitch=0.0):
     for side, (sh, el, wr, ua, fa, hd) in {1: (11, 13, 15, LUA, LFA, LH), -1: (12, 14, 16, RUA, RFA, RH)}.items():
         rest = np.array([side * ARM_X, ARM_Y, 0])
         rest_n = np.cross(rest, [0, 0, 1])
-        G[:, ua], G[:, fa] = hinge_frames(vec(sh, el), vec(el, wr), rest, rest_n, G[:, CHEST],
-                                          depth_axis=tilt @ np.array([0., 0, 1]), forward=G[:, CHEST, :, 2])
+        depth_axis = tilt @ np.array([0., 0, 1])
+        G[:, ua], G[:, fa] = hinge_frames(foreshorten(vec(sh, el), depth_axis), foreshorten(vec(el, wr), depth_axis),
+                                          rest, rest_n, G[:, CHEST], depth_axis=depth_axis, forward=G[:, CHEST, :, 2])
         G[:, hd] = G[:, fa]
     if framing == 'full':
         for hp, kn, an, he, to, ul, ll, ft in [(23, 25, 27, 29, 31, LUL, LLL, LF), (24, 26, 28, 30, 32, RUL, RLL, RF)]:
