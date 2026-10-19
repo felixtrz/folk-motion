@@ -29,6 +29,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+from scipy.ndimage import gaussian_filter1d, maximum_filter1d
 from scipy.optimize import least_squares
 from scipy.signal import butter, filtfilt
 from scipy.spatial.transform import Rotation, Slerp
@@ -176,6 +177,51 @@ def foreshorten(v, depth_axis):
     return plane + (np.where(z < 0, -1, 1) * depth)[:, None] * depth_axis
 
 
+# Shirt cross-sections of the authored torso (rest height, half-width, half-depth), padded by
+# the forearm/hand radius; used to keep hands out of the body.
+TORSO = np.array([(.79, .196, .122), (.83, .19, .118), (.9, .178, .11), (1.06, .158, .104),
+                  (1.23, .17, .104), (1.35, .209, .095), (1.395, .212, .077)]) + [0, .03, .03]
+
+
+def torso_penetration(G, chest, pts):
+    """Depth (m, > 0 inside) of hips-relative points (N, ..., 3) inside the torso."""
+    flat = pts.reshape(len(pts), -1, 3)
+    out = np.full(flat.shape[:2], -1.0)
+    for bone, origin, rest_y in ((HIPS, np.zeros_like(chest), .86), (CHEST, chest, 1.38)):
+        q = np.einsum('nji,nmj->nmi', G[:, bone], flat - origin[:, None]) + [0, rest_y, 0]
+        y = np.clip(q[..., 1], TORSO[0, 0], TORSO[-1, 0])
+        hw, hd = np.interp(y, TORSO[:, 0], TORSO[:, 1]), np.interp(y, TORSO[:, 0], TORSO[:, 2])
+        r = np.sqrt((q[..., 0] / hw) ** 2 + (q[..., 2] / hd) ** 2)
+        within = (q[..., 1] > TORSO[0, 0] - .03) & (q[..., 1] < TORSO[-1, 0] + .03)
+        pen = np.where(within, (1 - r) * np.minimum(hw, hd), -1)
+        out = np.where((q[..., 1] < 1.05) if bone == HIPS else (q[..., 1] >= 1.05), pen, out)
+    return out.reshape(pts.shape[:-1])
+
+
+def clear_torso(a, f, G, chest, shoulder, toward):
+    """Bring a forearm or hand that would pass through the torso in front of it.
+
+    One camera cannot see that a forearm crossing the belly is in front of it; the depth that
+    fits the image can put it inside. Moving elbow and forearm toward the camera keeps their
+    image directions exact, so search the smallest such move that clears the body, then ease
+    it in and out over neighbouring frames."""
+    ks = np.linspace(0, 1.5, 16)
+    ka, kf = np.meshgrid(ks, ks, indexing='ij')
+    ka, kf = ka.ravel(), kf.ravel()
+    A = unit(unit(a)[:, None] + ka[None, :, None] * toward[:, None])          # (N, C, 3)
+    F = unit(unit(f)[:, None] + kf[None, :, None] * toward[:, None])
+    elbow = shoulder[:, None] + A * .255
+    along = np.array([.3, .55, .8, 1, 1.17, 1.34])                          # forearm, then hand
+    pts = elbow[:, :, None] + F[:, :, None] * (.235 * along)[None, None, :, None]
+    pen = torso_penetration(G, chest, pts).max(-1)                         # (N, C)
+    cost = np.where(pen > 0, 100 + pen * 1e3, 0) + ka ** 2 + kf ** 2
+    best = np.argmin(cost, 1)
+    k = np.stack([ka[best], kf[best]], 1)
+    k = gaussian_filter1d(maximum_filter1d(k, 7, axis=0), 2, axis=0)
+    return (unit(unit(a) + k[:, :1] * toward) * np.linalg.norm(a, axis=-1, keepdims=True),
+            unit(unit(f) + k[:, 1:] * toward) * np.linalg.norm(f, axis=-1, keepdims=True))
+
+
 def resolve_depth(a, f, ref, depth_axis, w, forward=None):
     """Per-frame depth signs of both bones (Viterbi over 4 states: each as measured or mirrored).
 
@@ -218,7 +264,7 @@ def resolve_depth(a, f, ref, depth_axis, w, forward=None):
     return ca[idx, pick], cf[idx, pick]
 
 
-def hinge_frames(a, f, rest_dir, rest_normal, parent, twist_limit=np.radians(110), depth_axis=None, forward=None):
+def hinge_frames(a, f, rest_dir, rest_normal, parent, twist_limit=np.radians(110), depth_axis=None, forward=None, clear=None):
     """Global rotations for a two-bone hinge chain (upper, lower) over N frames; parent is the
     global rotation of the chain's parent bone (chest or hips)."""
     ref = (parent @ rest_dir, parent @ rest_normal)
@@ -229,6 +275,8 @@ def hinge_frames(a, f, rest_dir, rest_normal, parent, twist_limit=np.radians(110
     if depth_axis is not None:
         depth_axis = np.broadcast_to(depth_axis, f.shape)
         a, f = resolve_depth(a, f, ref, depth_axis, w, forward)
+        if clear is not None:
+            a, f = clear(a, f)
         if len(f) >= 16:
             a, f = lowpass(a, 30, 6.0), lowpass(f, 30, 6.0)
         w = bend_of(f)
@@ -323,8 +371,12 @@ def solve_shot(img, wld, s, framing, pitch=0.0):
         rest = np.array([side * ARM_X, ARM_Y, 0])
         rest_n = np.cross(rest, [0, 0, 1])
         depth_axis = tilt @ np.array([0., 0, 1])
+        chest = G[:, HIPS] @ np.array([0, .24, 0]) + G[:, SPINE] @ np.array([0, .28, 0])
+        shoulder = chest + G[:, CHEST] @ np.array([side * .18, 0, .015])
+        toward = depth_axis * np.sign(G[:, CHEST, :, 2] @ depth_axis)[:, None]
+        clear = lambda a, f: clear_torso(a, f, G, chest, shoulder, toward)
         G[:, ua], G[:, fa] = hinge_frames(foreshorten(vec(sh, el), depth_axis), foreshorten(vec(el, wr), depth_axis),
-                                          rest, rest_n, G[:, CHEST], depth_axis=depth_axis, forward=G[:, CHEST, :, 2])
+                                          rest, rest_n, G[:, CHEST], depth_axis=depth_axis, forward=G[:, CHEST, :, 2], clear=clear)
         G[:, hd] = G[:, fa]
     if framing == 'full':
         for hp, kn, an, he, to, ul, ll, ft in [(23, 25, 27, 29, 31, LUL, LLL, LF), (24, 26, 28, 30, 32, RUL, RLL, RF)]:
