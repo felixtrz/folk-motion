@@ -20,6 +20,7 @@ const STRINGS = {
     speed: 'Playback speed', play: 'Play', pause: 'Pause', scrub: 'Scrub through the movement', xr: 'View in headset ↗',
     rows: ['Classification', 'Tradition', 'Genre', 'Observed subject', 'Observed function', 'Duration', 'Foot contacts', 'Lateral excursion', 'Pelvis height', 'Peak hand speed', 'Hand oscillation', 'Head yaw range'],
     method: 'Method. Reconstructed from a single 720p teaching video by monocular pose estimation. Depth is estimated, feet are pinned to observed contacts, and legs in close-up shots are inferred. Source: ',
+    imprint: 'Published by', studio: 'EliXR Games — more experiments',
     caution: 'Not a substitute for an instructor. Do not attempt the bear near furniture.',
   },
   zh: {
@@ -30,6 +31,7 @@ const STRINGS = {
     speed: '播放速度', play: '播放', pause: '暂停', scrub: '拖动以浏览动作', xr: '在头显中观看 ↗',
     rows: ['分类', '流派', '类别', '观察对象', '观察到的功能', '时长', '着地次数', '横向位移', '骨盆高度', '手部峰值速度', '手部摆动频率', '头部转动范围'],
     method: '方法：基于一段 720p 教学视频，用单目姿态估计重建。深度为估计值，双脚固定在观察到的着地点上，特写镜头中的腿部为推断。来源：',
+    imprint: '出品', studio: 'EliXR Games — 更多实验',
     caution: '不能替代老师。请勿在家具附近尝试狗熊。',
   },
 } as const;

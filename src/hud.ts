@@ -18,6 +18,10 @@ export type HudHandlers = {
 type Contact = { foot: 'left' | 'right'; start: number; end: number };
 
 const SUBJECTS = T.subjects;
+const STUDIO = 'https://elixr.games/';
+// The studio's wordmark, as a publisher's imprint on the plate: black on paper, links out.
+const IMPRINT = `<a class="imprint" href="${STUDIO}" target="_blank" rel="noopener" aria-label="${T.studio}" title="${T.studio}">`
+  + `<img src="${import.meta.env.BASE_URL}brand/elixr-games-black.svg" alt="EliXR Games" width="47" height="15"></a>`;
 const PLAY = '<svg viewBox="0 0 12 12"><path d="M2 1l9 5-9 5z"/></svg>';
 const PAUSE = '<svg viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
 
@@ -46,7 +50,7 @@ export class Hud {
       </header>
       <footer class="hud-bottom">
         <section class="measures" aria-label="${T.measurements}"><h3>${T.measurements}</h3><table><tbody data-k="measures"></tbody></table></section>
-        <p class="function fade"><span>${T.function}</span><em data-k="function"></em></p>
+        <p class="function"><span class="fn-label"><span class="fade">${T.function}</span>${IMPRINT}</span><em class="fade" data-k="function"></em></p>
         <dl class="telemetry" aria-hidden="true">
           <div><dt>${T.t}</dt><dd data-k="t"></dd></div>
           <div><dt>${T.pelvis}</dt><dd data-k="pelvis"></dd></div>
@@ -73,6 +77,7 @@ export class Hud {
         <table><tbody data-k="table"></tbody></table>
         <p class="foot">${T.method}<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>.</p>
         <p class="foot caution">${T.caution}</p>
+        <p class="foot">${LANG === 'zh' ? `<a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a> ${T.imprint}` : `${T.imprint} <a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a>`}</p>
         <button class="xr" data-k="xr" hidden>${T.xr}</button>
       </section>`;
     this.root.querySelectorAll<HTMLElement>('[data-k]').forEach(node => { this.el[node.dataset.k!] = node; });

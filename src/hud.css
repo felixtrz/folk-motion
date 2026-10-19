@@ -44,6 +44,7 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 
 .hud-bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 var(--pad) max(14px, env(safe-area-inset-bottom)); background: linear-gradient(rgba(247, 247, 245, 0), var(--paper) 30%); }
 .function { font-family: var(--serif); font-size: 17px; line-height: 1.2; margin: 34px 0 10px; max-width: 30em; }
+.function .fn-label { display: flex; justify-content: space-between; align-items: center; }
 .function span { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 4px; }
 
 .gait { position: relative; height: 34px; margin-bottom: 4px; touch-action: none; }
@@ -183,3 +184,9 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 :lang(zh) .function em, :lang(zh) .sheet td { font-family: var(--zh); font-style: normal; }
 :lang(zh) .function em { font-size: 1.04em; }
 :lang(zh) .sheet .foot { font-style: normal; }
+
+/* Studio imprint beside the caption label: a quiet wordmark with a full-size tap target. */
+.imprint { position: relative; display: block; pointer-events: auto; line-height: 0; opacity: .82; transition: opacity .2s; }
+.imprint:hover, .imprint:focus-visible { opacity: 1; }
+.imprint::before { content: ''; position: absolute; inset: -15px -10px; }
+.imprint img { height: 15px; width: auto; display: block; }
