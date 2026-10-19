@@ -112,3 +112,9 @@ In an immersive session the original guided lesson returns: three shapes per mov
 count-in, and optional hand coaching that compares tracked wrists to the guide in the
 front plane. It never assesses legs, balance or technique. Start slowly with small
 movements in clear space.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The motion files in
+`public/motion/` are derived from third-party teaching footage (see
+[Motion reconstruction](#motion-reconstruction)) and are not covered by that license.

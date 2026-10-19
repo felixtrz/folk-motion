@@ -51,3 +51,6 @@ __pycache__/
 
 # Source-derived imagery (video frames, AI likeness of the demonstrator) is never published
 assets/character/
+
+# Per-machine agent config (absolute local paths)
+opencode.json
