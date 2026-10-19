@@ -1,0 +1,80 @@
+{
+  "source": "https://www.bilibili.com/video/BV1YMaA6jEpK/",
+  "note": "Shot boundaries from ffmpeg scdet (threshold 8), trimmed a few frames inside each cut. 'full' shots show the whole body; 'closeup' shots crop the legs and contribute upper-body motion only.",
+  "shots": [
+    {
+      "label": "flash-step",
+      "start": 2.5,
+      "end": 9.87,
+      "framing": "full"
+    },
+    {
+      "label": "ball-kick",
+      "start": 12.24,
+      "end": 17.43,
+      "framing": "full"
+    },
+    {
+      "label": "bear-shake-a",
+      "start": 20.4,
+      "end": 29.53,
+      "framing": "full"
+    },
+    {
+      "label": "bear-shake-b",
+      "start": 29.6,
+      "end": 31.7,
+      "framing": "closeup"
+    },
+    {
+      "label": "bear-shake-c",
+      "start": 31.77,
+      "end": 33.8,
+      "framing": "full"
+    },
+    {
+      "label": "head-shake-a",
+      "start": 36.13,
+      "end": 42.47,
+      "framing": "full"
+    },
+    {
+      "label": "head-shake-b",
+      "start": 42.53,
+      "end": 44.7,
+      "framing": "closeup"
+    },
+    {
+      "label": "head-shake-c",
+      "start": 44.77,
+      "end": 46.93,
+      "framing": "full"
+    }
+  ],
+  "moves": [
+    {
+      "id": "flash-step",
+      "start": 2.5,
+      "end": 9.87,
+      "teacher": "Zhao Tiechun"
+    },
+    {
+      "id": "ball-kick",
+      "start": 12.24,
+      "end": 17.43,
+      "teacher": "Zhao Tiechun"
+    },
+    {
+      "id": "bear-shake",
+      "start": 25.0,
+      "end": 33.8,
+      "teacher": "Ming Wenjun"
+    },
+    {
+      "id": "head-shake",
+      "start": 37.8,
+      "end": 46.93,
+      "teacher": "Ming Wenjun"
+    }
+  ]
+}
