@@ -45,6 +45,9 @@ export class SpecimenViewer extends createSystem({}) {
   private azimuth = 0;
   private elevation = .23;
   private azimuthVelocity = 0;
+  private settling = false;   // easing back to settleAzimuth/Elevation after a subject flick
+  private settleAzimuth = 0;
+  private settleElevation = 0;
   private idle = 0;
   private follow = 0;
   private shadow!: ContactShadow;
@@ -226,7 +229,16 @@ export class SpecimenViewer extends createSystem({}) {
   private bindInput(): void {
     const canvas = this.world.renderer.domElement;
     let dragging = -1, lastX = 0, lastY = 0;
-    const down = (e: PointerEvent) => { if (this.presenting) return; dragging = e.pointerId; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); };
+    // A quick horizontal flick switches subject; a slower drag orbits. The flick's own orbit is
+    // undone so the camera does not jump with the swap.
+    let startX = 0, startY = 0, startTime = 0, startAzimuth = 0, startElevation = 0;
+    const down = (e: PointerEvent) => {
+      if (this.presenting) return;
+      dragging = e.pointerId; lastX = startX = e.clientX; lastY = startY = e.clientY;
+      if (this.settling) { this.azimuth = this.settleAzimuth; this.elevation = this.settleElevation; this.settling = false; }
+      startTime = e.timeStamp; startAzimuth = this.azimuth; startElevation = this.elevation;
+      canvas.setPointerCapture(e.pointerId);
+    };
     const move = (e: PointerEvent) => {
       if (e.pointerId !== dragging) return;
       const dx = (e.clientX - lastX) / Math.max(1, canvas.clientWidth), dy = (e.clientY - lastY) / Math.max(1, canvas.clientHeight);
@@ -235,7 +247,15 @@ export class SpecimenViewer extends createSystem({}) {
       this.elevation = Math.min(1.45, Math.max(.05, this.elevation + dy * 1.5));
       this.idle = 0;
     };
-    const up = (e: PointerEvent) => { if (e.pointerId === dragging) dragging = -1; };
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== dragging) return;
+      dragging = -1;
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (e.type === 'pointerup' && e.timeStamp - startTime < 350 && Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+        this.settleAzimuth = startAzimuth; this.settleElevation = startElevation; this.settling = true; this.azimuthVelocity = 0;
+        this.selectSubject(this.subject + (dx < 0 ? 1 : -1));
+      }
+    };
     canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move);
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
     const key = (e: KeyboardEvent) => {
@@ -412,7 +432,12 @@ export class SpecimenViewer extends createSystem({}) {
     const distance = height / 2 / Math.tan(fov * Math.PI / 360);
     const targetY = top / 2 - (.5 - (a + b) / 2) * height;
     // After a few idle seconds the specimen eases back to the front view.
-    if (this.idle > 4) {
+    if (this.settling) {
+      const k = Math.min(1, delta * 12);
+      this.azimuth += (this.settleAzimuth - this.azimuth) * k;
+      this.elevation += (this.settleElevation - this.elevation) * k;
+      if (Math.abs(this.settleAzimuth - this.azimuth) < 1e-3) this.settling = false;
+    } else if (this.idle > 4) {
       this.azimuth = Math.atan2(Math.sin(this.azimuth), Math.cos(this.azimuth));
       this.azimuth -= this.azimuth * Math.min(1, delta * .8);
     } else if (this.idle > .05) this.azimuth += this.azimuthVelocity * delta;   // release inertia
