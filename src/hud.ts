@@ -5,6 +5,7 @@ import '@fontsource/instrument-serif/400-italic.css';
 import './hud.css';
 import type { Specimen } from './specimens.js';
 import type { SpecimenStats } from './motion-stats.js';
+import { LANG, T } from './i18n.js';
 
 export type HudHandlers = {
   select(index: number): void;
@@ -16,7 +17,7 @@ export type HudHandlers = {
 };
 type Contact = { foot: 'left' | 'right'; start: number; end: number };
 
-const SUBJECTS: [string, string][] = [['Human', 'Homo sapiens, folk-trained'], ['Robot', 'Automaton, general purpose'], ['Croc', 'Homo sapiens in Crocodylus costume']];
+const SUBJECTS = T.subjects;
 const PLAY = '<svg viewBox="0 0 12 12"><path d="M2 1l9 5-9 5z"/></svg>';
 const PAUSE = '<svg viewBox="0 0 12 12"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
 
@@ -30,49 +31,49 @@ export class Hud {
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers) {
     this.root.className = 'hud loading';
+    document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+    document.title = T.title;
     this.root.innerHTML = `
       <header class="hud-top">
-        <div class="masthead"><span><b>Folk Motion Studies</b><span class="long"> · Field Guide</span></span><span data-k="count"></span></div>
+        <div class="masthead"><span><b>${T.brand}</b><span class="long"> · ${T.guide}</span></span><span data-k="count"></span><div class="mast-subjects" data-k="mastSubjects" role="radiogroup" aria-label="${T.subject}"></div></div>
         <div class="title fade">
           <div class="zh" data-k="zh" lang="zh"></div><div class="plate" data-k="plate"></div>
           <div class="binomial" data-k="binomial"></div>
           <div class="common" data-k="common"></div>
           <div class="class" data-k="legend"></div>
         </div>
-        <div class="subjects" data-k="subjects" role="radiogroup" aria-label="Subject"><span>Subject</span></div>
+        <div class="subjects" data-k="subjects" role="radiogroup" aria-label="${T.subject}"><span>${T.subject}</span></div>
       </header>
       <footer class="hud-bottom">
-        <section class="measures" aria-label="Measurements"><h3>Measurements</h3><table><tbody data-k="measures"></tbody></table></section>
-        <p class="function fade"><span>Observed function</span><em data-k="function"></em></p>
+        <section class="measures" aria-label="${T.measurements}"><h3>${T.measurements}</h3><table><tbody data-k="measures"></tbody></table></section>
+        <p class="function fade"><span>${T.function}</span><em data-k="function"></em></p>
         <dl class="telemetry" aria-hidden="true">
-          <div><dt>t</dt><dd data-k="t"></dd></div>
-          <div><dt>pelvis</dt><dd data-k="pelvis"></dd></div>
-          <div><dt>hand</dt><dd data-k="hand"></dd></div>
-          <div><dt>planted · own</dt><dd class="feet" title="Filled: foot planted. Outline: foot in the air.">L<i class="dot" data-k="footL"></i> R<i class="dot" data-k="footR"></i></dd></div>
+          <div><dt>${T.t}</dt><dd data-k="t"></dd></div>
+          <div><dt>${T.pelvis}</dt><dd data-k="pelvis"></dd></div>
+          <div><dt>${T.hand}</dt><dd data-k="hand"></dd></div>
+          <div><dt>${T.planted}</dt><dd class="feet" title="${T.feetTitle}">${T.left}<i class="dot" data-k="footL"></i> ${T.right}<i class="dot" data-k="footR"></i></dd></div>
         </dl>
-        <div class="gait hit" data-k="gait" role="slider" aria-label="Scrub through the movement" tabindex="0">
-          <span class="lane-label l">L</span><span class="lane-label r">R</span>
+        <div class="gait hit" data-k="gait" role="slider" aria-label="${T.scrub}" tabindex="0">
+          <span class="lane-label l">${T.left}</span><span class="lane-label r">${T.right}</span>
           <div class="lane l" data-k="laneL"></div><div class="lane r" data-k="laneR"></div>
           <div class="playhead" data-k="playhead"></div>
         </div>
-        <div class="scale"><span data-k="scale0">0.00 s</span><span>foot contact</span><span data-k="scale1"></span></div>
+        <div class="scale"><span data-k="scale0">0.00 s</span><span>${T.contact}</span><span data-k="scale1"></span></div>
         <nav class="controls">
           <div class="index" data-k="index"></div>
-          <button class="speed" data-k="speed" aria-label="Playback speed"></button>
-          <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">Notes</button>
-          <button class="play" data-k="play" aria-label="Pause"></button>
+          <button class="speed" data-k="speed" aria-label="${T.speed}"></button>
+          <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">${T.notesButton}</button>
+          <button class="play" data-k="play" aria-label="${T.pause}"></button>
         </nav>
       </footer>
-      <section class="sheet" data-k="sheet" aria-label="Field notes">
-        <div class="masthead sheet-mast"><span><b>Folk Motion Studies</b> · Field notes</span><button class="close" data-k="close">Close</button></div>
+      <section class="sheet" data-k="sheet" aria-label="${T.notes}">
+        <div class="masthead sheet-mast"><span><b>${T.brand}</b> · ${T.notes}</span><button class="close" data-k="close">${T.close}</button></div>
         <div class="sheet-head"><h2 data-k="sheetTitle"></h2></div>
         <div class="sub" data-k="sheetSub"></div>
         <table><tbody data-k="table"></tbody></table>
-        <p class="foot">Method. Reconstructed from a single 720p teaching video by monocular pose estimation. Depth is
-          estimated, feet are pinned to observed contacts, and legs in close-up shots are inferred.
-          Source: <a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>.</p>
-        <p class="foot caution">Not a substitute for an instructor. Do not attempt the bear near furniture.</p>
-        <button class="xr" data-k="xr" hidden>View in headset ↗</button>
+        <p class="foot">${T.method}<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>.</p>
+        <p class="foot caution">${T.caution}</p>
+        <button class="xr" data-k="xr" hidden>${T.xr}</button>
       </section>`;
     this.root.querySelectorAll<HTMLElement>('[data-k]').forEach(node => { this.el[node.dataset.k!] = node; });
     specimens.forEach((s, i) => {
@@ -82,12 +83,15 @@ export class Hud {
       b.addEventListener('click', () => this.on.select(i));
       this.el.index.append(b);
     });
-    SUBJECTS.forEach(([label, title], i) => {
-      const b = document.createElement('button');
-      b.textContent = label; b.title = title; b.setAttribute('role', 'radio');
-      b.addEventListener('click', () => this.on.subject(i));
-      this.el.subjects.append(b);
-    });
+    // The switch is drawn twice: a row under the title (desktop) and in the masthead (phones).
+    for (const group of [this.el.subjects, this.el.mastSubjects]) {
+      SUBJECTS.forEach(([label, title], i) => {
+        const b = document.createElement('button');
+        b.textContent = label; b.title = title; b.setAttribute('role', 'radio');
+        b.addEventListener('click', () => this.on.subject(i));
+        group.append(b);
+      });
+    }
     this.el.play.addEventListener('click', () => this.on.togglePlay());
     this.el.speed.addEventListener('click', () => this.on.cycleSpeed());
     this.el.notesToggle.addEventListener('click', () => this.setNotes(!this.notesOpen));
@@ -116,11 +120,15 @@ export class Hud {
     this.root.style.setProperty('--header-h', `${(this.root.querySelector('.hud-top') as HTMLElement).offsetHeight}px`);
     const top = this.root.querySelector('.hud-top')!.getBoundingClientRect().bottom;
     const bottom = this.root.querySelector('.function')!.getBoundingClientRect().top;
-    return [Math.min(.5, top / h + .025), Math.max(.55, bottom / h - .02)];
+    // The fitted height already includes headroom for raised arms, so the margins stay small.
+    // Raised hands may brush the header's fade; the shadow keeps clear of the caption below.
+    return [Math.min(.5, top / h - .012), Math.max(.55, bottom / h - .035)];
   }
 
   showSubject(index: number): void {
-    [...this.el.subjects.querySelectorAll('button')].forEach((b, i) => b.setAttribute('aria-checked', String(i === index)));
+    for (const group of [this.el.subjects, this.el.mastSubjects]) {
+      [...group.querySelectorAll('button')].forEach((b, i) => b.setAttribute('aria-checked', String(i === index)));
+    }
   }
   setXRAvailable(available: boolean): void { this.el.xr.hidden = !available; }
   setVisible(visible: boolean): void { this.root.style.display = visible ? '' : 'none'; }
@@ -129,33 +137,28 @@ export class Hud {
   showSpecimen(index: number, stats: SpecimenStats, contacts: Contact[], start: number, end: number): void {
     const s = this.specimens[index];
     this.root.classList.remove('loading');
-    this.text('count', `Pl. ${s.plate} / ${['I', 'II', 'III', 'IV'][this.specimens.length - 1]}`);
+    const zh = LANG === 'zh';
+    const copy = zh ? s.zhCopy : { classification: s.classification, origin: s.origin, subject: s.subject, function: s.function };
+    this.text('count', `${T.plate} ${s.plate} / ${['I', 'II', 'III', 'IV'][this.specimens.length - 1]}`);
     this.text('zh', s.zh); this.text('plate', s.plate); this.text('binomial', s.binomial);
-    this.el.common.innerHTML = `${s.common} <i>· ${s.pinyin}</i>`;
-    this.text('function', s.function);
-    this.text('legend', s.classification);
+    // Second line: the English common name (English) or the tradition (Chinese), then pinyin.
+    this.el.common.innerHTML = `${zh ? copy.origin : s.common} <i>· ${s.pinyin}</i>`;
+    this.text('function', copy.function);
+    this.text('legend', copy.classification);
     this.text('scale1', `${(end - start).toFixed(2)} s`);
     this.text('sheetTitle', `${s.binomial}`);
-    this.el.sheetSub.innerHTML = `<span lang="zh" class="zh-sub">${s.zh}</span><br>${s.common} · <i>${s.pinyin}</i>`;
-    const rows: [string, string][] = [
-      ['Classification', s.classification],
-      ['Tradition', `${s.origin}`],
-      ['Genre', s.originZh],
-      ['Observed subject', s.subject],
-      ['Observed function', s.function],
-      ['Duration', `${stats.duration.toFixed(2)} s`],
-      ['Foot contacts', `${stats.contacts}`],
-      ['Lateral excursion', `${stats.lateral.toFixed(2)} m`],
-      ['Pelvis height', `${stats.pelvisLow.toFixed(2)}–${stats.pelvisHigh.toFixed(2)} m`],
-      ['Peak hand speed', `${stats.wristPeak.toFixed(1)} m/s`],
-      ['Hand oscillation', `${stats.wristHz.toFixed(1)} Hz`],
-      ['Head yaw range', `${stats.headYaw.toFixed(0)}°`],
-    ];
+    this.el.sheetSub.innerHTML = `<span lang="zh" class="zh-sub">${s.zh}</span><br>${zh ? copy.origin : s.common} · <i>${s.pinyin}</i>`;
+    const values = [copy.classification, copy.origin, s.originZh, copy.subject, copy.function,
+      `${stats.duration.toFixed(2)} s`, `${stats.contacts}`, `${stats.lateral.toFixed(2)} m`,
+      `${stats.pelvisLow.toFixed(2)}–${stats.pelvisHigh.toFixed(2)} m`, `${stats.wristPeak.toFixed(1)} m/s`,
+      `${stats.wristHz.toFixed(1)} Hz`, `${stats.headYaw.toFixed(0)}°`];
+    // In Chinese the tradition already names the genre, so that row is dropped.
+    const rows = T.rows.map((k, i): [string, string] => [k, values[i]]).filter((_, i) => !(zh && i === 2));
     const row = ([k, v]: [string, string]) => {
       const tr = document.createElement('tr'), a = document.createElement('td'), b = document.createElement('td');
       a.textContent = k; b.textContent = v; tr.append(a, b); return tr;
     };
-    this.el.measures.replaceChildren(...rows.slice(5).map(row));
+    this.el.measures.replaceChildren(...rows.slice(zh ? 4 : 5).map(row));
     this.el.table.replaceChildren(...rows.map(([k, v]) => {
       const tr = document.createElement('tr');
       const a = document.createElement('td'), b = document.createElement('td');
@@ -183,7 +186,7 @@ export class Hud {
     this.text('hand', `${hand.toFixed(2)} m/s`);
     this.toggle('footL', left); this.toggle('footR', right);
     const icon = playing ? PAUSE : PLAY;
-    if (this.last.get('play') !== icon) { this.el.play.innerHTML = icon; this.el.play.setAttribute('aria-label', playing ? 'Pause' : 'Play'); this.last.set('play', icon); }
+    if (this.last.get('play') !== icon) { this.el.play.innerHTML = icon; this.el.play.setAttribute('aria-label', playing ? T.pause : T.play); this.last.set('play', icon); }
     this.text('speed', `${speed}×`);
   }
 

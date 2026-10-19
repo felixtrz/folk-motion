@@ -12,7 +12,8 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const open = async ([w, h], hero) => {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1080 / w, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
   const page = await ctx.newPage();
-  await page.goto(`${base}?specimen=1&review=1`, { waitUntil: 'load' });
+  // The video is for a Chinese audience: the app runs in its Chinese edition.
+  await page.goto(`${base}?specimen=1&review=1&lang=zh`, { waitUntil: 'load' });
   await page.waitForSelector('.hud:not(.loading)', { timeout: 90000 });
   await page.evaluate(() => document.fonts.ready);
   if (hero) {
@@ -41,19 +42,13 @@ try {
       await p.page.click('[data-k="notesToggle"]'); p.notes = !!shot.notes; await p.page.waitForTimeout(500);
       // The video names no performer: hide the 'Observed subject' row of the notes sheet.
       await p.page.evaluate(() => document.querySelectorAll('.sheet tr').forEach(tr => {
-        if (tr.firstElementChild?.textContent === 'Observed subject') tr.style.display = 'none';
+        if (['Observed subject', '观察对象'].includes(tr.firstElementChild?.textContent ?? '')) tr.style.display = 'none';
       }));
     }
-    await p.page.evaluate(async ([t, az, sub]) => {
+    await p.page.evaluate(async ([t, az]) => {
       window.__review.frame(t, az);
-      // UI shots: the app's own 'Observed function' line carries the Chinese caption.
-      const fn = document.querySelector('[data-k="function"]');
-      if (sub && fn && fn.textContent !== sub) {
-        fn.textContent = sub; fn.style.fontSize = '21px'; fn.style.fontStyle = 'normal';
-        fn.previousElementSibling.textContent = 'Observed function · 观察到的功能';
-      }
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    }, [t, az, shot.page === 'ui' && !shot.notes ? shot.sub.replace(/^功能：/, '') : null]);
+    }, [t, az]);
     // The first frame on each page waits out the subject's fade-in.
     if (!p.warm) { await p.page.waitForTimeout(2500); await p.page.evaluate(([t, az]) => window.__review.frame(t, az), [t, az]); await p.page.waitForTimeout(300); p.warm = true; }
     await p.page.screenshot({ path: `${out}/${String(n).padStart(4, '0')}.png`, timeout: 180000 });

@@ -34,6 +34,8 @@ npm test           # motion, contact, lesson and coaching tests
 Controls: tap 01–04 or ←/→ for plates, play/pause (Space), speed, **Notes** (N) for the
 specimen card, drag to orbit, swipe left/right to change subject. Deep links: `?specimen=3&avatar=croc&t=3.4&paused=1`
 (`avatar` = `instructor` | `robot` | `croc`).
+The interface is in Chinese for Chinese-language browsers and English otherwise; `?lang=zh` or
+`?lang=en` overrides it.
 
 ## How it looks the way it does
 
