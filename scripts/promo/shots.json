@@ -1,0 +1,201 @@
+{
+  "fps": 30,
+  "duration": 32,
+  "uiViewport": [
+    480,
+    640
+  ],
+  "heroViewport": [
+    480,
+    640
+  ],
+  "heroBand": [
+    0.25,
+    0.94
+  ],
+  "shots": [
+    {
+      "start": 0,
+      "end": 2,
+      "page": "hero",
+      "specimen": 2,
+      "subjects": [
+        [
+          0,
+          0
+        ]
+      ],
+      "t0": 2.0,
+      "az": [
+        14,
+        -6
+      ],
+      "kicker": "FOLK MOTION STUDIES · 田野图鉴",
+      "title": "把民间舞做成了科学标本",
+      "sub": "一段教学视频 → 四个 3D 标本"
+    },
+    {
+      "start": 2,
+      "end": 8,
+      "page": "ui",
+      "specimen": 1,
+      "subjects": [
+        [
+          2,
+          0
+        ]
+      ],
+      "t0": 2.2,
+      "az": [
+        0,
+        0
+      ],
+      "kicker": "PLATE I · GRESSUS FULGURANS",
+      "title": "标本 I　闪身步",
+      "sub": "功能：躲避一个只有他看得见的东西"
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "page": "hero",
+      "specimen": 3,
+      "subjects": [
+        [
+          8,
+          1
+        ],
+        [
+          9,
+          2
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          11,
+          2
+        ]
+      ],
+      "t0": 2.2,
+      "az": [
+        16,
+        -16
+      ],
+      "swipes": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "kicker": "SUBJECT · 实验对象",
+      "title": "左右滑动，换个对象跳",
+      "names": [
+        "人类",
+        "机器人",
+        "鳄鱼"
+      ]
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "page": "ui",
+      "specimen": 2,
+      "subjects": [
+        [
+          12,
+          2
+        ]
+      ],
+      "t0": 0.6,
+      "az": [
+        0,
+        0
+      ],
+      "kicker": "PLATE II · CALX PRODIGI",
+      "title": "标本 II　浪子踢球",
+      "sub": "功能：踢一个不存在的球"
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "page": "hero",
+      "specimen": 3,
+      "subjects": [
+        [
+          16,
+          1
+        ]
+      ],
+      "t0": 4.3,
+      "az": [
+        -30,
+        330
+      ],
+      "kicker": "PLATE III · URSUS TREMULANS",
+      "title": "标本 III　狗熊哆嗦毛",
+      "sub": "功能：不用毛巾，把自己抖干"
+    },
+    {
+      "start": 20,
+      "end": 24,
+      "page": "hero",
+      "specimen": 4,
+      "subjects": [
+        [
+          20,
+          0
+        ]
+      ],
+      "t0": 1.6,
+      "az": [
+        -10,
+        10
+      ],
+      "kicker": "PLATE IV · CAPUT OSCILLANS",
+      "title": "标本 IV　摇头晃脑",
+      "sub": "功能：向全世界宣布对自己很满意"
+    },
+    {
+      "start": 24,
+      "end": 28,
+      "page": "ui",
+      "specimen": 4,
+      "subjects": [
+        [
+          24,
+          2
+        ]
+      ],
+      "t0": 3.0,
+      "az": [
+        0,
+        0
+      ],
+      "notes": true,
+      "kicker": "FIELD NOTES · 田野笔记",
+      "title": "每个动作都附测量数据",
+      "sub": "数据是认真测的，动作是认真跳的"
+    },
+    {
+      "start": 28,
+      "end": 32,
+      "page": "hero",
+      "specimen": 4,
+      "subjects": [
+        [
+          28,
+          2
+        ]
+      ],
+      "t0": 4.5,
+      "az": [
+        24,
+        -24
+      ],
+      "kicker": "FOLK MOTION STUDIES",
+      "title": "民间舞动作研究所",
+      "sub": "手机浏览器打开就能玩 · 链接见评论区"
+    }
+  ]
+}

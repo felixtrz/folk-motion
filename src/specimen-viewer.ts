@@ -56,6 +56,7 @@ export class SpecimenViewer extends createSystem({}) {
   private tops: number[] = [];
   private band = [.3, .74];
   private bandDirty = true;
+  private bandOverride: number[] | null = null;   // review captures only
   private prints: Mesh[] = [];
   private printCanvases: HTMLCanvasElement[] = [];
   private readonly lastPlant = [new Vector3(), new Vector3()];
@@ -98,6 +99,16 @@ export class SpecimenViewer extends createSystem({}) {
           if (el !== undefined) this.elevation = el * Math.PI / 180;
         },
         play: (t: number) => { this.time = t; },
+        // Capture hooks: move time and camera without re-selecting the plate, switch subject,
+        // and override the vertical band the figure is fitted into (null restores the HUD's).
+        frame: (t: number, az: number, el?: number) => {
+          // Shown as playing, but time only moves when the capture says so.
+          this.playing = true; this.scrubbing = true;
+          this.time = t; this.azimuth = az * Math.PI / 180; this.idle = -1e9;
+          if (el !== undefined) this.elevation = el * Math.PI / 180;
+        },
+        subject: (i: number) => this.selectSubject(i),
+        band: (band: number[] | null) => { this.bandOverride = band; this.bandDirty = true; },
         camera: () => { const c = this.world.camera as PerspectiveCamera; return { band: this.band, aspect: c.aspect, fov: c.fov, target: this.target.toArray(), player: this.world.player.position.toArray(), top: this.tops[this.selected], span: this.extents[this.selected] }; },
         shadows: () => [this.shadow.probe(this.world.renderer), this.contact.probe(this.world.renderer)],
         light: () => {
@@ -425,6 +436,7 @@ export class SpecimenViewer extends createSystem({}) {
     if (camera.fov !== fov || camera.near !== .1) { camera.fov = fov; camera.near = .1; camera.updateProjectionMatrix(); }
     // Fit floor..clip top into the band the HUD actually leaves free (measured, so it holds on
     // every screen size), centred in it, and wide enough for the clip's widest reach.
+    if (this.bandDirty && this.bandOverride) { this.band = this.bandOverride; this.bandDirty = false; }
     if (this.bandDirty) { if (portrait) this.band = this.hud.freeBand(); else { this.hud.freeBand(); this.band = [.27, .8]; } this.bandDirty = false; }
     const [a, b] = this.band, top = this.tops[this.selected] ?? 2;
     const halfWidth = this.extents[this.selected] ?? 1;

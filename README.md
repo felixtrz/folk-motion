@@ -102,6 +102,16 @@ AVATAR=robot npx @iwsdk/cli browser run scripts/export-instructor.mjs   # instru
 python3 scripts/pack-instructor-glb.py robot
 ```
 
+Promo video (3:4, 1080×1440, for Xiaohongshu): frame-exact capture of the shots in
+`scripts/promo/shots.json`, an original synthesised soundtrack, and Chinese captions.
+
+```sh
+npm run build && npx vite preview --port 4173 &
+node scripts/promo/capture.mjs .local/promo/frames
+.venv-pose/bin/python scripts/promo/music.py .local/promo/music.wav 32 "8,9,10,11" "2,12,16,20,24,28"
+.venv-pose/bin/python scripts/promo/compose.py .local/promo/frames .local/promo/music.wav .local/promo/folk-motion-xhs.mp4
+```
+
 Design review tooling (headless Chromium, production build served by `vite preview`):
 `scripts/phone-shots.mjs`, `scripts/avatar-shots.mjs` with `review-sheet.py` /
 `avatar-sheet.py`.
