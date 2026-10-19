@@ -16,7 +16,9 @@ Pipeline per frame/joint:
   3. Bone directions combine image-plane angles (precise) with model depth (the
      only depth cue available); bone lengths come from the rig, never the video.
   4. Hinge-aware retarget: elbows and knees bend in one plane, the bend-plane
-     normal is blended to an anatomical fallback when the limb is nearly straight.
+     normal relaxes to the anatomical (swing-twist) axis when the limb is nearly
+     straight. Arm depth signs, which one camera cannot observe, are chosen per frame
+     for plausible, continuous twist (front/back ties broken toward the front).
   5. Root height keeps the lowest sole on the floor, plus measured airborne lift.
 Close-up shots only observe the upper body. Their legs and root are interpolated
 between neighbouring full shots and the frames are flagged as estimated.
@@ -145,47 +147,122 @@ def clean_shot(points, fs, floor):
     return out
 
 
-def hinge_frames(a, f, rest_dir, rest_normal, fallback, twist_limit=np.radians(110)):
-    """Global rotations for a two-bone hinge chain (upper, lower) over N frames."""
-    n_raw = np.cross(a, f)
-    bend = np.linalg.norm(n_raw, axis=-1, keepdims=True) / np.maximum(np.linalg.norm(a, axis=-1, keepdims=True) * np.linalg.norm(f, axis=-1, keepdims=True), 1e-9)
-    n_raw = unit(n_raw)
+def twist_angle(au, n, ref):
+    """Angle of bend axis n about bone au, measured from the anatomical axis.
+
+    ref = (rest bone direction, rest bend axis), both in world space per frame. The anatomical
+    axis is the rest axis carried by the shortest rotation from the rest direction to the bone
+    (swing-twist), singular only for a bone pointing exactly opposite its rest direction."""
+    rest_dir, rest_n = ref
+    c = np.sum(rest_dir * au, -1, keepdims=True)
+    k = np.cross(rest_dir, au)
+    e1 = rest_n * c + np.cross(k, rest_n) + k * np.sum(k * rest_n, -1, keepdims=True) / np.maximum(1 + c, 1e-3)
+    e1 = unit(e1 - au * np.sum(e1 * au, -1, keepdims=True))
+    e2 = np.cross(au, e1)
+    return np.arctan2(np.sum(n * e2, -1), np.sum(n * e1, -1)), e1, e2
+
+
+def resolve_depth(a, f, ref, depth_axis, w, forward=None):
+    """Per-frame depth signs of both bones (Viterbi over 4 states: each as measured or mirrored).
+
+    One camera cannot tell a bone tilted toward it from one tilted away: both project to the
+    same image. The model's depth sign flickers when a bone lies near the image plane, which
+    shows up as an implausible twist or a limb swinging through the body. Mirroring depth
+    keeps the 2D image exact, so pick the sequence with plausible, continuous twist and
+    continuous depth, breaking front/back ties toward the front of the chest."""
+    mirror = lambda v: v - 2 * np.sum(v * depth_axis, -1, keepdims=True) * depth_axis
+    states = [(0, 0), (1, 0), (0, 1), (1, 1)]
+    A = np.stack([a, mirror(a)], 1)
+    F = np.stack([f, mirror(f)], 1)
+    ca = np.stack([A[:, i] for i, _ in states], 1)                 # (N, 4, 3)
+    cf = np.stack([F[:, j] for _, j in states], 1)
+    tw = np.stack([twist_angle(unit(ca[:, k]), unit(np.cross(ca[:, k], cf[:, k])), ref)[0] for k in range(4)], 1)
+    comfort = np.radians(70)
+    unary = w[:, None] * (np.clip(np.abs(tw) - comfort, 0, None) / np.radians(20)) ** 2
+    unary += .15 * np.array([i + j for i, j in states])          # prefer the measurement
+    if forward is not None:
+        behind = -np.sum(unit(ca) * forward[:, None], -1)
+        unary += (np.clip(behind - .3, 0, None) / .3) ** 2
+    za = np.sum(unit(ca) * depth_axis[:, None], -1)
+    zf = np.sum(unit(cf) * depth_axis[:, None], -1)
+    N = len(f)
+    cost = unary[0].copy()
+    back = np.zeros((N, 4), int)
+    for t in range(1, N):
+        dtw = np.abs((tw[t][None, :] - tw[t - 1][:, None] + np.pi) % (2 * np.pi) - np.pi)
+        wt = np.minimum(w[t], w[t - 1])
+        trans = ((wt * dtw / np.radians(30)) ** 2 + (np.abs(za[t][None, :] - za[t - 1][:, None]) / .25) ** 2
+                 + (np.abs(zf[t][None, :] - zf[t - 1][:, None]) / .25) ** 2)
+        tot = cost[:, None] + trans
+        back[t] = np.argmin(tot, 0)
+        cost = tot[back[t], np.arange(4)] + unary[t]
+    pick = np.zeros(N, int)
+    pick[-1] = int(np.argmin(cost))
+    for t in range(N - 1, 0, -1):
+        pick[t - 1] = back[t, pick[t]]
+    idx = np.arange(N)
+    return ca[idx, pick], cf[idx, pick]
+
+
+def hinge_frames(a, f, rest_dir, rest_normal, parent, twist_limit=np.radians(110), depth_axis=None, forward=None):
+    """Global rotations for a two-bone hinge chain (upper, lower) over N frames; parent is the
+    global rotation of the chain's parent bone (chest or hips)."""
+    ref = (parent @ rest_dir, parent @ rest_normal)
+    def bend_of(f):
+        b = np.linalg.norm(np.cross(a, f), axis=-1) / np.maximum(np.linalg.norm(a, axis=-1) * np.linalg.norm(f, axis=-1), 1e-9)
+        return np.clip((b - .1) / .2, 0, 1)
+    w = bend_of(f)
+    if depth_axis is not None:
+        depth_axis = np.broadcast_to(depth_axis, f.shape)
+        a, f = resolve_depth(a, f, ref, depth_axis, w, forward)
+        if len(f) >= 16:
+            a, f = lowpass(a, 30, 6.0), lowpass(f, 30, 6.0)
+        w = bend_of(f)
     au = unit(a)
+    n_raw = unit(np.cross(a, f))
     # Elbows and knees flex one way only, so a x f is the true bend axis, sign included.
     # A straight limb has no measurable axis: keep the previous one (parallel transport,
     # no added twist) and turn toward the measured axis as the bend becomes clear. All
     # turning happens about the bone itself and is rate-limited, never via a degenerate blend.
-    w = np.clip((bend[:, 0] - .1) / .2, 0, 1)
     n = np.empty_like(n_raw)
-    # Twist is tracked as an angle from the anatomical axis (fallback) about the bone. A
+    # Twist is tracked as an angle from the anatomical axis (swing-twist) about the bone. A
     # straight limb relaxes toward anatomical, and the angle is clamped to joint limits:
     # a single camera cannot tell a forearm twisted 170 degrees backwards from a natural one.
+    measured, e1, e2 = twist_angle(au, n_raw, ref)
     theta = 0.0
     for t in range(len(a)):
-        e1 = fallback[t] - au[t] * np.dot(fallback[t], au[t])
-        e1 = unit(e1) if np.linalg.norm(e1) > 1e-6 else unit(np.cross(au[t], [0, 0, 1]))
-        e2 = np.cross(au[t], e1)
-        measured = np.arctan2(np.dot(n_raw[t], e2), np.dot(n_raw[t], e1))
-        delta = (measured - theta + np.pi) % (2 * np.pi) - np.pi
+        # Take the short way round unless it ends beyond the joint limit while the long way
+        # does not: going from -100 to +70 degrees must pass through 0 (anatomical), never
+        # through the impossible 180 (arm twisted backwards), where the clamp would trap it.
+        delta = (measured[t] - theta + np.pi) % (2 * np.pi) - np.pi
+        alt = delta - np.sign(delta) * 2 * np.pi
+        if abs(theta + delta) > twist_limit and abs(theta + alt) <= twist_limit:
+            delta = alt
         theta += np.clip(w[t] * delta, -MAX_TWIST, MAX_TWIST)
         theta -= (1 - w[t]) * .12 * theta
         theta = float(np.clip(theta, -twist_limit, twist_limit))
-        n[t] = e1 * np.cos(theta) + e2 * np.sin(theta)
+        n[t] = e1[t] * np.cos(theta) + e2[t] * np.sin(theta)
     # Smooth the bend plane over time to suppress twist flicker.
     n = unit(lowpass(n, 30, 3.0)) if len(n) >= 16 else n
+    n = unit(n - au * np.sum(n * au, -1, keepdims=True))
     rest = basis(rest_dir[None], rest_normal[None])[0]
     upper = basis(a, n) @ rest.T
-    # Pure hinge: the lower bone is the measured direction projected into the bend plane,
-    # so the joint only ever rotates about n (no twist, no degeneracy when n drifts).
-    # The flexion angle is a single scalar per frame: filter it directly so one blurred
-    # frame with a flipped forearm depth cannot snap the joint.
-    side = np.cross(n, au)
-    phi = np.unwrap(np.arctan2(np.sum(f * side, -1), np.sum(f * au, -1)))
+    # The lower bone keeps its measured direction (so the image always matches) and rolls with
+    # the bend axis. Where the twist is held at a limit the axis is re-fitted to the forearm, so
+    # the elbow still flexes one way only.
+    fu = unit(f)
+    side = unit(np.cross(n, au))
+    phi = np.unwrap(np.arctan2(np.sum(fu * side, -1), np.sum(fu * au, -1)))
     if len(phi) >= 16:
         phi = lowpass(hampel_fill(phi[:, None], window=9, k=2.5, floor=np.radians(12))[:, 0], 30, 6.0)
     phi = np.clip(phi, 0, np.radians(160))
     fp = au * np.cos(phi)[:, None] + side * np.sin(phi)[:, None]
-    lower = basis(fp, n) @ rest.T
+    # Blend the hinge-plane forearm toward the measured one by how far out of plane it is.
+    off = np.abs(np.sum(fu * n, -1))[:, None]
+    k = np.clip((off - .15) / .35, 0, 1)
+    fl = unit(fp * (1 - k) + fu * k)
+    nl = unit(n - fl * np.sum(n * fl, -1, keepdims=True))
+    lower = basis(fl, nl) @ rest.T
     return upper, lower
 
 
@@ -231,15 +308,14 @@ def solve_shot(img, wld, s, framing, pitch=0.0):
     for side, (sh, el, wr, ua, fa, hd) in {1: (11, 13, 15, LUA, LFA, LH), -1: (12, 14, 16, RUA, RFA, RH)}.items():
         rest = np.array([side * ARM_X, ARM_Y, 0])
         rest_n = np.cross(rest, [0, 0, 1])
-        fallback = np.einsum('nij,j->ni', G[:, CHEST], rest_n)
-        G[:, ua], G[:, fa] = hinge_frames(vec(sh, el), vec(el, wr), rest, rest_n, fallback)
+        G[:, ua], G[:, fa] = hinge_frames(vec(sh, el), vec(el, wr), rest, rest_n, G[:, CHEST],
+                                          depth_axis=tilt @ np.array([0., 0, 1]), forward=G[:, CHEST, :, 2])
         G[:, hd] = G[:, fa]
     if framing == 'full':
         for hp, kn, an, he, to, ul, ll, ft in [(23, 25, 27, 29, 31, LUL, LLL, LF), (24, 26, 28, 30, 32, RUL, RLL, RF)]:
             rest = np.array([0., -1, 0])
             rest_n = np.array([1., 0, 0])
-            fallback = G[:, HIPS, :, 0]
-            G[:, ul], G[:, ll] = hinge_frames(vec(hp, kn), vec(kn, an), rest, rest_n, fallback, np.radians(57))
+            G[:, ul], G[:, ll] = hinge_frames(vec(hp, kn), vec(kn, an), rest, rest_n, G[:, HIPS], np.radians(57))
             # Heel/toe landmarks are a few pixels apart and swap during stamps, so the foot
             # only gets ankle flexion and a little yaw relative to the shin, within joint limits.
             toe = unit(vec(he, to))
