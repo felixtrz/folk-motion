@@ -1,5 +1,5 @@
 import {
-  CanvasTexture, Color, DirectionalLight, SRGBColorSpace, Fog, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
+  CanvasTexture, Color, DirectionalLight, Vector2, SRGBColorSpace, Fog, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
   Quaternion, Vector3, Euler, createSystem,
 } from '@iwsdk/core';
 import { ContactShadow } from './contact-shadow.js';
@@ -10,6 +10,8 @@ import { MOVES, validateMotion, type Motion } from './motion.js';
 import { SPECIMENS } from './specimens.js';
 import { Sfx } from './sfx.js';
 import { Trial, type Kind, type Prop } from './trial.js';
+import { composePlate, PLATE_W, SHOT_H } from './plate.js';
+import { T } from './i18n.js';
 
 const PAPER = 0xf7f7f5;   // far floor, horizon and page; the light pool under the subject is brighter
 const STAGE = new Vector3(.7, 0, -2.8);
@@ -24,7 +26,7 @@ const IDLE = { clip: 0, start: .05, end: .6, speed: .3 };                     //
 const DODGES = [{ key: 2.75, end: 3.65 }, { key: 4.35, end: 5.05 }, { key: 6.0, end: 6.8 }];   // the ducks of the flash step
 const REACT = {
   can: { clip: 0, key: 0, end: 0, flight: .55 },
-  shuttle: { clip: 1, key: 4.05, end: 4.95, flight: 1.35 },  // rear heel-flick of the left foot
+  shuttle: { clip: 1, key: 2.87, end: 3.85, flight: .9 },    // the raised right foot swings forward
   balloon: { clip: 2, key: 1.1, end: 4.1, flight: .6 },      // hit just before the bear shakes
   flower: { clip: 3, key: 1.0, end: 4.4, flight: .6 },       // pinned just before the smug head-shake
 };
@@ -90,6 +92,8 @@ export class SpecimenViewer extends createSystem({}) {
   private bandOverride: number[] | null = null;   // review captures only
   private seekRequest: { clip: number; t: number } | null = null;
   private timeScale = 1;   // review only: slow motion for inspecting contacts
+  private lastOutcome = -1;
+  private readonly size = new Vector2();
 
   init(): void {
     // Three subjects share one rig and motion; only the selected one is shown and posed.
@@ -107,6 +111,7 @@ export class SpecimenViewer extends createSystem({}) {
       throw: (i, x, y) => this.throwAt(i, x, y),
       subject: i => this.selectSubject(i),
       sound: on => this.sfx.setEnabled(on),
+      plate: () => this.makePlate(),
       enterXR: () => { try { this.world.launchXR(); } catch { /* Unsupported: the button stays harmless. */ } },
     }, this.sfx.enabled);
     this.cleanupFuncs.push(() => this.hud.dispose());
@@ -320,16 +325,13 @@ export class SpecimenViewer extends createSystem({}) {
       ({ clip, key, end, flight } = REACT[kind]);
     }
     this.startClip(clip, key - flight, end, 'none', 1);
-    if (kind === 'shuttle') this.probe(key, 13, this.tmp.set(0, -.09, -.07), this.aim);   // under the left heel
+    if (kind === 'shuttle') this.probe(key, 16, this.tmp.set(0, -.04, .07), this.aim);   // on the right instep
     else if (kind === 'balloon') this.probe(key, 2, this.tmp.set(0, -.12, depth), this.aim);
     else if (kind === 'flower') {
       const [px, py] = PINS[this.trial.pinnedOn(s.rig.bone(2)) % PINS.length];
       this.probe(key, 2, this.tmp.set(px, py, depth + .01), this.aim);
     }
-    // The shuttlecock goes up out of frame and drops onto the heel behind him, as a real
-    // 毽子 does; a direct lob would have to pass through him.
-    const via = kind === 'shuttle' ? this.toCamera.copy(this.aim).setY(this.aim.y + 2.9) : undefined;
-    this.trial.launch(kind, this.from, this.aim, flight, prop => this.arrive(kind, prop), via, .55);
+    this.trial.launch(kind, this.from, this.aim, flight, prop => this.arrive(kind, prop));
     this.hud.setActive(index);
     this.hud.showBehaviour(clip, this.stats[clip]);
   }
@@ -343,9 +345,9 @@ export class SpecimenViewer extends createSystem({}) {
         this.sfx.play('swoosh'); this.counts[0]++; this.streak++;
         break;
       case 'shuttle':
-        // Flicked back over his head toward the viewer.
+        // Kicked forward and up, straight back at whoever threw it.
         this.sfx.play('kick'); this.counts[1]++; this.streak++;
-        this.trial.release(prop, this.tmp.copy(this.toCamera).multiplyScalar(.85).setY(4).add(this.aim.set((Math.random() - .5) * .5, 0, 0)));
+        this.trial.release(prop, this.tmp.copy(this.toCamera).multiplyScalar(1.1).setY(5.4).add(this.aim.set((Math.random() - .5) * .4, 0, 0)));
         navigator.vibrate?.(12);
         break;
       case 'balloon':
@@ -360,7 +362,44 @@ export class SpecimenViewer extends createSystem({}) {
         this.trial.pin(prop, s.rig.bone(2));
         break;
     }
-    this.hud.setLog(this.counts, this.trials, KINDS.indexOf(kind));
+    this.lastOutcome = KINDS.indexOf(kind);
+    this.hud.setLog(this.counts, this.trials, this.lastOutcome);
+  }
+
+  /**
+   * Renders this instant at plate resolution, framed on the specimen, and sets it as a
+   * field-guide plate. The renderer is resized for one frame inside this call, so the
+   * screen never shows it.
+   */
+  private async makePlate(): Promise<void> {
+    if (!this.ready || this.presenting) return;
+    const r = this.world.renderer, camera = this.world.camera as PerspectiveCamera;
+    const ratio = r.getPixelRatio(); r.getSize(this.size);
+    const aspect = camera.aspect, fov = camera.fov;
+    r.setPixelRatio(1); r.setSize(PLATE_W, SHOT_H, false);
+    camera.aspect = PLATE_W / SHOT_H; camera.fov = 30; camera.updateProjectionMatrix();
+    this.subjects[this.subject].hips.getWorldPosition(this.tmp);
+    const height = 2.35, distance = height / 2 / Math.tan(15 * Math.PI / 180);
+    this.aim.set(this.tmp.x, 1.12, this.tmp.z);
+    this.world.player.position.set(
+      this.aim.x + Math.sin(this.azimuth) * distance * Math.cos(this.elevation),
+      this.aim.y + Math.sin(this.elevation) * distance,
+      this.aim.z + Math.cos(this.azimuth) * distance * Math.cos(this.elevation));
+    this.world.player.updateMatrixWorld(true);
+    camera.position.set(0, 0, 0); camera.lookAt(this.aim);
+    r.render(this.world.scene, camera);
+    const shot = document.createElement('canvas'); shot.width = PLATE_W; shot.height = SHOT_H;
+    shot.getContext('2d')!.drawImage(r.domElement, 0, 0, PLATE_W, SHOT_H);
+    r.setPixelRatio(ratio); r.setSize(this.size.x, this.size.y, false);
+    camera.aspect = aspect; camera.fov = fov; camera.updateProjectionMatrix();
+    this.sfx.play('chime');
+    const text = this.hud.plateText();
+    const k = this.lastOutcome;
+    const card = await composePlate(shot, {
+      ...text, trial: `${T.trial} ${String(this.trials).padStart(3, '0')}`, site: T.site,
+      result: k >= 0 ? `${T.log[k]} · ${String(this.counts[k]).padStart(2, '0')}` : '',
+    });
+    this.hud.showPlate(card);
   }
 
   /** A reaction finished: three clean dodges or returns in a row earn a gloat. */

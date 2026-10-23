@@ -12,6 +12,8 @@ export type HudHandlers = {
   throw(index: number, x: number, y: number): void;
   subject(index: number): void;
   sound(on: boolean): void;
+  /** Make a shareable plate of this moment. */
+  plate(): void;
   enterXR(): void;
 };
 
@@ -35,6 +37,9 @@ export class Hud {
   private readonly last = new Map<string, string>();
   private notesOpen = false;
   private soundOn: boolean;
+  private gloss = '';
+  private plateFile: File | null = null;
+  private plateUrl = '';
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers, soundOn: boolean) {
     this.soundOn = soundOn;
@@ -54,7 +59,7 @@ export class Hud {
       </header>
       <footer class="hud-bottom">
         <section class="measures" aria-label="${T.measurements}"><h3>${T.measurements}</h3><table><tbody data-k="measures"></tbody></table></section>
-        <p class="function"><span data-k="fnLabel"></span><em class="fade" data-k="function"></em></p>
+        <p class="function"><span class="fn-head"><span data-k="fnLabel"></span><button class="plate-btn" data-k="plateBtn">${T.savePlate} ↗</button></span><em class="fade" data-k="function"></em></p>
         <dl class="telemetry log" aria-live="polite">
           ${T.log.map((label, i) => `<div><dt>${label}</dt><dd data-k="log${i}">00</dd></div>`).join('')}
         </dl>
@@ -76,6 +81,15 @@ export class Hud {
         <p class="foot caution">${T.caution}</p>
         <p class="foot">${LANG === 'zh' ? `<a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a> ${T.imprint}` : `${T.imprint} <a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a>`}</p>
         <button class="xr" data-k="xr" hidden>${T.xr}</button>
+      </section>
+      <section class="plate-sheet" data-k="plateSheet" aria-label="${T.savePlate}">
+        <img data-k="plateImg" alt="">
+        <p class="hint">${T.plateHint}</p>
+        <div class="plate-actions">
+          <button class="close" data-k="plateClose">${T.close}</button>
+          <a class="download" data-k="plateDownload" download="folk-motion-plate.png">${T.download}</a>
+          <button class="share" data-k="plateShare">${T.share} ↗</button>
+        </div>
       </section>`;
     this.root.querySelectorAll<HTMLElement>('[data-k]').forEach(node => { this.el[node.dataset.k!] = node; });
     // The subject switch is drawn twice: a row under the title (desktop) and in the masthead (phones).
@@ -94,6 +108,14 @@ export class Hud {
     this.el.notesToggle.addEventListener('click', () => this.setNotes(!this.notesOpen));
     this.el.close.addEventListener('click', () => this.setNotes(false));
     this.el.xr.addEventListener('click', () => this.on.enterXR());
+    this.el.plateBtn.addEventListener('click', () => this.on.plate());
+    this.el.plateClose.addEventListener('click', () => this.closePlate());
+    this.el.plateShare.addEventListener('click', () => {
+      // Sharing needs a fresh tap, so the image is prepared before this button is pressed.
+      const file = this.plateFile;
+      if (file && navigator.canShare?.({ files: [file] })) void navigator.share({ files: [file], title: T.title }).catch(() => undefined);
+      else (this.el.plateDownload as HTMLAnchorElement).click();
+    });
     this.el.sound.addEventListener('click', () => { this.soundOn = !this.soundOn; this.paintSound(); this.on.sound(this.soundOn); });
     this.paintSound();
     document.body.append(this.root);
@@ -152,6 +174,7 @@ export class Hud {
       // Specimen zero: the control, before any stimulus.
       this.text('zh', T.idleZh); this.text('plate', '0'); this.text('binomial', T.idleBinomial);
       this.el.common.innerHTML = `${T.idleCommon} <i>· dài jī</i>`;
+      this.gloss = `${T.idleCommon} · dài jī`;
       this.text('fnLabel', T.protocol); this.text('function', T.idleFunction); this.text('legend', T.idleClass);
       return;
     }
@@ -160,6 +183,7 @@ export class Hud {
     this.text('zh', s.zh); this.text('plate', s.plate); this.text('binomial', s.binomial);
     // Second line: the English common name (English) or the tradition (Chinese), then pinyin.
     this.el.common.innerHTML = `${zh ? copy.origin : s.common} <i>· ${s.pinyin}</i>`;
+    this.gloss = `${zh ? copy.origin : s.common} · ${s.pinyin}`;
     this.text('fnLabel', T.function); this.text('function', copy.function); this.text('legend', copy.classification);
     if (stats) this.showNotes(index, stats);
   }
@@ -185,6 +209,27 @@ export class Hud {
     this.el.table.replaceChildren(...rows.map(row));
   }
 
+  /** The words on the plate: whatever the field guide is showing now. */
+  plateText(): { brand: string; guide: string; zh: string; numeral: string; binomial: string; gloss: string; fnLabel: string; fnText: string; zhText: boolean } {
+    const get = (k: string) => this.last.get(k) ?? '';
+    return { brand: T.brand, guide: T.guide, zh: get('zh'), numeral: get('plate'), binomial: get('binomial'), gloss: this.gloss,
+      fnLabel: get('fnLabel'), fnText: get('function'), zhText: LANG === 'zh' };
+  }
+
+  showPlate(card: HTMLCanvasElement): void {
+    if (this.plateUrl) URL.revokeObjectURL(this.plateUrl);
+    this.plateFile = null;
+    card.toBlob(blob => {
+      if (!blob) return;
+      this.plateFile = new File([blob], 'folk-motion-plate.png', { type: 'image/png' });
+      this.plateUrl = URL.createObjectURL(blob);
+      (this.el.plateImg as HTMLImageElement).src = this.plateUrl;
+      (this.el.plateDownload as HTMLAnchorElement).href = this.plateUrl;
+      this.el.plateSheet.dataset.open = 'true';
+    }, 'image/png');
+  }
+  closePlate(): void { this.el.plateSheet.dataset.open = 'false'; }
+
   private paintSound(): void {
     this.el.sound.textContent = `${T.sound} ${this.soundOn ? '●' : '○'}`;
     this.el.sound.setAttribute('aria-pressed', String(this.soundOn));
@@ -193,5 +238,5 @@ export class Hud {
     if (this.last.get(key) === value) return;
     this.el[key].textContent = value; this.last.set(key, value);
   }
-  dispose(): void { this.root.remove(); }
+  dispose(): void { if (this.plateUrl) URL.revokeObjectURL(this.plateUrl); this.root.remove(); }
 }

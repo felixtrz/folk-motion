@@ -25,6 +25,7 @@ const STRINGS = {
     idleFunction: 'Throw something. Record the response.',
     items: [['Soda', 'Throw a soda can'], ['Shuttle', 'Throw a shuttlecock (jianzi)'], ['Balloon', 'Throw a water balloon'], ['Flower', 'Award a red paper flower']],
     log: ['Dodged', 'Returned', 'Soaked', 'Flattered'], sound: 'Sound',
+    savePlate: 'Save plate', share: 'Share', download: 'Download', plateHint: 'Long-press the image to save it.', site: 'fm.elixr.games',
     caution: 'Not a substitute for an instructor. Do not attempt the bear near furniture.',
   },
   zh: {
@@ -40,6 +41,7 @@ const STRINGS = {
     idleFunction: '扔点什么，记录反应。',
     items: [['可乐罐', '扔一个可乐罐'], ['毽子', '扔一个毽子'], ['水气球', '扔一个水气球'], ['小红花', '奖励一朵小红花']],
     log: ['闪避', '踢回', '湿透', '得意'], sound: '声音',
+    savePlate: '生成图版', share: '分享', download: '下载', plateHint: '长按图片即可保存。', site: 'fm.elixr.games',
     caution: '不能替代老师。请勿在家具附近尝试狗熊。',
   },
 } as const;

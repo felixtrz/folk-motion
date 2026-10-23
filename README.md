@@ -40,13 +40,14 @@ and its observed function becomes literally true:
 | Throw | Response | Observed function |
 |---|---|---|
 | Soda can | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
-| Shuttlecock (毽子) | 浪子踢球, heel-flicks it back | Kicking a ball that is not there. |
+| Shuttlecock (毽子) | 浪子踢球, kicks it back up with the raised foot | Kicking a ball that is not there. |
 | Water balloon | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
 | Red paper flower (小红花) | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
 
 Three clean dodges or returns in a row earn an unprompted gloat. The trial log counts Dodged /
 Returned / Soaked / Flattered. Swipe left/right (or the masthead tabs) to change subject; drag to
-orbit; **Notes** opens the specimen card. Keys: 1–4 throw, Space throws at random, ←/→ subject,
+orbit; **Notes** opens the specimen card; **Save plate** renders this moment as a 3:4 field-guide
+plate (1080×1440) to share or download (`src/plate.ts`). Keys: 1–4 throw, Space throws at random, ←/→ subject,
 N notes. The interface is in Chinese for Chinese-language browsers and English otherwise;
 `?lang=zh` or `?lang=en` overrides it. `?avatar=instructor|robot|croc` picks the subject, and old
 plate links (`?specimen=3&t=3.4`) still open that plate as recorded.
