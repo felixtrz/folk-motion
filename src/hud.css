@@ -216,3 +216,18 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 .plate-actions { display: flex; gap: 10px; align-items: center; }
 .plate-actions > * { height: 44px; padding: 0 18px !important; border-radius: 22px; font-size: 11px !important; letter-spacing: .1em; text-transform: uppercase; display: inline-flex; align-items: center; border: 1px solid var(--rule) !important; color: var(--ink); text-decoration: none; }
 .plate-actions .share { background: var(--ink) !important; color: var(--paper) !important; border-color: var(--ink) !important; }
+
+/* Phones: one title line, the Chinese name with its binomial beside it; the English/pinyin
+   gloss and the classification live in Notes. Every line saved goes to the specimen. */
+@media (max-width: 759px) {
+  .title { display: flex; align-items: baseline; gap: 0 12px; }
+  .title .zh { order: 0; flex: none; }
+  .title .binomial { order: 1; margin-top: 0; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title .plate { order: 2; margin-left: auto; flex: none; }
+  .title .common, .title .class { display: none; }
+}
+@media (max-width: 380px) {
+  .title .zh { font-size: 28px; }
+  .title .plate { font-size: 28px; }
+  .title .binomial { font-size: 17px; }
+}

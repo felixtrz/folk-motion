@@ -37,7 +37,15 @@ const CHEST_FRONT = [.12, .145, .175];   // chest-bone origin to shirt front, pe
 // where his smug hands never cover it.
 const PINS = [[.075, -.045], [-.07, -.06], [.02, -.15], [.1, -.17], [-.09, -.18], [-.01, -.03]];
 
-type Play = { clip: number; start: number; end: number; t: number; speed: number; dir: number; loop: 'none' | 'pingpong' | 'wrap'; offX: number; offZ: number };
+// Flash-step windows that carry him sideways: used to step back to his mark after a dodge.
+const SIDESTEPS = [{ start: .6, end: 1.8 }, { start: 2.2, end: 3.65 }, { start: 3.8, end: 5.05 }, { start: 5.45, end: 6.8 }];
+
+type Role = 'idle' | 'dodge' | 'return' | 'react' | 'gloat' | 'plate';
+/** A window of a recording being played. Root travel is relative to where he stood at the start
+ *  (off) plus a correction (corr) spread along the clip's own travel (a0..a1), so he ends where
+ *  the role needs him without his feet sliding while planted. */
+type Play = { clip: number; start: number; end: number; t: number; speed: number; dir: number; loop: 'none' | 'pingpong' | 'wrap';
+  offX: number; offZ: number; corrX: number; corrZ: number; a0: number; a1: number; role: Role };
 
 /**
  * Phone-first field trial (everything outside a headset session): the specimen stands in a
@@ -58,7 +66,8 @@ export class SpecimenViewer extends createSystem({}) {
   private ready = false;
   private presenting = false;
   private manual = false;             // a plate played as recorded (review captures, old deep links)
-  private cur: Play = { clip: 0, start: IDLE.start, end: IDLE.end, t: IDLE.start, speed: IDLE.speed, dir: 1, loop: 'pingpong', offX: 0, offZ: 0 };
+  private cur: Play = { clip: 0, start: IDLE.start, end: IDLE.end, t: IDLE.start, speed: IDLE.speed, dir: 1, loop: 'pingpong', offX: 0, offZ: 0, corrX: 0, corrZ: 0, a0: 0, a1: 0, role: 'idle' };
+  private travel: Float32Array[] = [];   // cumulative floor distance the hips cover, per clip frame
   private blendLeft = 0;
   private anchorX = 0;
   private anchorZ = 0;
@@ -78,11 +87,6 @@ export class SpecimenViewer extends createSystem({}) {
   private readonly euler = new Euler(0, 0, 0, 'YXZ');
   private azimuth = 0;
   private elevation = .23;
-  private azimuthVelocity = 0;
-  private settling = false;   // easing back to settleAzimuth/Elevation after a subject flick
-  private settleAzimuth = 0;
-  private settleElevation = 0;
-  private idle = 0;
   private follow = 0;
   private shadow!: ContactShadow;
   private contact!: ContactShadow;
@@ -132,12 +136,12 @@ export class SpecimenViewer extends createSystem({}) {
       // Plays plate `specimen` as recorded, held at time t.
       seek: (specimen: number, t: number, az?: number, el?: number) => {
         this.showPlate(specimen - 1, t);
-        if (az !== undefined) { this.azimuth = az * Math.PI / 180; this.idle = -1e9; }
+        if (az !== undefined) { this.azimuth = az * Math.PI / 180; }
         if (el !== undefined) this.elevation = el * Math.PI / 180;
       },
       play: (t: number) => { this.cur.t = t; },
       frame: (t: number, az: number, el?: number) => {
-        this.cur.t = t; this.azimuth = az * Math.PI / 180; this.idle = -1e9;
+        this.cur.t = t; this.azimuth = az * Math.PI / 180;
         if (el !== undefined) this.elevation = el * Math.PI / 180;
       },
       throw: (i: number) => this.throwAt(i, innerWidth / 2, innerHeight * .88),
@@ -206,6 +210,11 @@ export class SpecimenViewer extends createSystem({}) {
         return validateMotion(await response.json());
       }));
       this.stats = this.motions.map((m, i) => measure(m, MOVES[i].watchStart, MOVES[i].watchEnd));
+      this.travel = this.motions.map(m => {
+        const out = new Float32Array(m.frameCount);
+        for (let f = 1; f < m.frameCount; f++) out[f] = out[f - 1] + Math.hypot(m.root[f * 3] - m.root[f * 3 - 3], m.root[f * 3 + 2] - m.root[f * 3 - 1]);
+        return out;
+      });
       // Widest reach of the hands relative to the camera's follow point, over the whole clip.
       this.extents = this.motions.map((m, i) => {
         let reach = .55;
@@ -242,15 +251,35 @@ export class SpecimenViewer extends createSystem({}) {
   }
 
   /** Cuts to a window of a recording, fading in from the current pose, played where he stands. */
-  private startClip(clip: number, start: number, end: number, loop: Play['loop'], speed: number, fade = true): void {
+  private travelAt(clip: number, t: number): number {
+    const a = this.travel[clip], f = Math.max(0, Math.min(a.length - 1, t * this.motions[clip].fps));
+    const i = Math.floor(f), j = Math.min(i + 1, a.length - 1);
+    return a[i] + (a[j] - a[i]) * (f - i);
+  }
+
+  /**
+   * Cuts to a window of a recording, fading in from the current pose, played where he stands.
+   * With `home`, the clip's net drift is corrected so he finishes on his mark (0, 0).
+   */
+  private startClip(clip: number, start: number, end: number, loop: Play['loop'], speed: number, role: Role, fade = true, home = false): void {
     if (fade) { this.subjects[this.subject].rig.snapshot(); this.blendLeft = BLEND; } else this.blendLeft = 0;
     const offX = this.manual ? 0 : this.anchorX - this.rootAt(clip, start, 0);
     const offZ = this.manual ? 0 : this.anchorZ - this.rootAt(clip, start, 2);
-    this.cur = { clip, start, end, t: start, speed, dir: 1, loop, offX, offZ };
+    const corrX = home ? -(this.anchorX + this.rootAt(clip, end, 0) - this.rootAt(clip, start, 0)) : 0;
+    const corrZ = home ? -(this.anchorZ + this.rootAt(clip, end, 2) - this.rootAt(clip, start, 2)) : 0;
+    this.cur = { clip, start, end, t: start, speed, dir: 1, loop, offX, offZ, corrX, corrZ, a0: this.travelAt(clip, start), a1: this.travelAt(clip, end), role };
+  }
+
+  /** Share of the correction applied by time t: it moves only while the recording itself is
+   *  travelling, so planted feet stay put. */
+  private shiftAt(t: number): number {
+    const p = this.cur;
+    if (!p.corrX && !p.corrZ) return 0;
+    return p.a1 - p.a0 > .02 ? Math.max(0, Math.min(1, (this.travelAt(p.clip, t) - p.a0) / (p.a1 - p.a0))) : (t - p.start) / (p.end - p.start);
   }
 
   private startIdle(fade = true): void {
-    this.startClip(IDLE.clip, IDLE.start, IDLE.end, 'pingpong', IDLE.speed, fade);
+    this.startClip(IDLE.clip, IDLE.start, IDLE.end, 'pingpong', IDLE.speed, 'idle', fade);
     this.busy = false;
     this.hud?.setBusy(false);
   }
@@ -261,7 +290,7 @@ export class SpecimenViewer extends createSystem({}) {
     this.manual = true;
     const clip = (index + MOVES.length) % MOVES.length, move = MOVES[clip];
     this.anchorX = this.anchorZ = 0;
-    this.startClip(clip, move.watchStart, move.watchEnd, 'wrap', 0, false);
+    this.startClip(clip, move.watchStart, move.watchEnd, 'wrap', 0, 'plate', false);
     this.cur.t = t;
     this.bandDirty = true;
     this.hud.showBehaviour(clip, this.stats[clip]);
@@ -290,7 +319,8 @@ export class SpecimenViewer extends createSystem({}) {
   private probe(t: number, bone: number, local: Vector3, out: Vector3): Vector3 {
     const s = this.subjects[this.subject];
     s.rig.apply(this.motions[this.cur.clip], t, true, this.points, this.confidence);
-    s.rig.shiftRoot(this.cur.offX, this.cur.offZ);
+    const w = this.shiftAt(t);
+    s.rig.shiftRoot(this.cur.offX + this.cur.corrX * w, this.cur.offZ + this.cur.corrZ * w);
     this.guide.updateMatrixWorld(true);
     return s.rig.bone(bone).localToWorld(out.copy(local));
   }
@@ -325,7 +355,8 @@ export class SpecimenViewer extends createSystem({}) {
     } else {
       ({ clip, key, end, flight } = REACT[kind]);
     }
-    this.startClip(clip, key - flight, end, 'none', 1);
+    // A dodge keeps its sideways leap (the gag); everything else finishes on his mark.
+    this.startClip(clip, key - flight, end, 'none', 1, kind === 'can' ? 'dodge' : 'react', true, kind !== 'can');
     if (kind === 'shuttle') this.probe(key, 16, this.tmp.set(0, -.04, .07), this.aim);   // on the right instep
     else if (kind === 'balloon') this.probe(key, 2, this.tmp.set(0, -.12, depth), this.aim);
     else if (kind === 'flower') {
@@ -403,14 +434,24 @@ export class SpecimenViewer extends createSystem({}) {
     this.hud.showPlate(card);
   }
 
-  /** A reaction finished: three clean dodges or returns in a row earn a gloat. */
+  /**
+   * A reaction finished. After a dodge he flash-steps back to his mark; three clean dodges or
+   * returns in a row then earn a gloat; then he rests.
+   */
   private clipEnded(): void {
     const p = this.cur;
-    this.anchorX = Math.max(-.45, Math.min(.45, p.offX + this.rootAt(p.clip, p.end, 0)));
-    this.anchorZ = Math.max(-.25, Math.min(.25, p.offZ + this.rootAt(p.clip, p.end, 2)));
-    if (this.streak >= 3 && !(p.clip === GLOAT.clip && p.start === GLOAT.start)) {
+    this.anchorX = p.offX + p.corrX + this.rootAt(p.clip, p.end, 0);
+    this.anchorZ = p.offZ + p.corrZ + this.rootAt(p.clip, p.end, 2);
+    if (p.role === 'dodge' && Math.hypot(this.anchorX, this.anchorZ) > .06) {
+      // The sidestep that carries him most nearly back; its residue is corrected on the way.
+      const back = SIDESTEPS.map(w => ({ ...w, d: this.rootAt(0, w.end, 0) - this.rootAt(0, w.start, 0) }))
+        .sort((a, b) => Math.abs(this.anchorX + a.d) - Math.abs(this.anchorX + b.d))[0];
+      this.startClip(0, back.start, back.end, 'none', 1, 'return', true, true);
+      return;
+    }
+    if (this.streak >= 3 && p.role !== 'gloat') {
       this.streak = 0;
-      this.startClip(GLOAT.clip, GLOAT.start, GLOAT.end, 'none', 1);
+      this.startClip(GLOAT.clip, GLOAT.start, GLOAT.end, 'none', 1, 'gloat', true, true);
       this.hud.showBehaviour(GLOAT.clip, this.stats[GLOAT.clip]);
       this.sfx.play('chime');
       return;
@@ -420,35 +461,20 @@ export class SpecimenViewer extends createSystem({}) {
 
   private bindInput(): void {
     const canvas = this.world.renderer.domElement;
-    let dragging = -1, lastX = 0, lastY = 0;
-    // A quick horizontal flick switches subject; a slower drag orbits. The flick's own orbit is
-    // undone so the camera does not jump with the swap.
-    let startX = 0, startY = 0, startTime = 0, startAzimuth = 0, startElevation = 0;
+    // The camera is fixed; a horizontal swipe on the stage changes subject.
+    let dragging = -1, startX = 0, startY = 0;
     const down = (e: PointerEvent) => {
       if (this.presenting) return;
-      dragging = e.pointerId; lastX = startX = e.clientX; lastY = startY = e.clientY;
-      if (this.settling) { this.azimuth = this.settleAzimuth; this.elevation = this.settleElevation; this.settling = false; }
-      startTime = e.timeStamp; startAzimuth = this.azimuth; startElevation = this.elevation;
+      dragging = e.pointerId; startX = e.clientX; startY = e.clientY;
       canvas.setPointerCapture(e.pointerId);
-    };
-    const move = (e: PointerEvent) => {
-      if (e.pointerId !== dragging) return;
-      const dx = (e.clientX - lastX) / Math.max(1, canvas.clientWidth), dy = (e.clientY - lastY) / Math.max(1, canvas.clientHeight);
-      lastX = e.clientX; lastY = e.clientY;
-      this.azimuth -= dx * 4; this.azimuthVelocity = -dx * 4 * 60;
-      this.elevation = Math.min(1.45, Math.max(.05, this.elevation + dy * 1.5));
-      this.idle = 0;
     };
     const up = (e: PointerEvent) => {
       if (e.pointerId !== dragging) return;
       dragging = -1;
       const dx = e.clientX - startX, dy = e.clientY - startY;
-      if (e.type === 'pointerup' && e.timeStamp - startTime < 350 && Math.abs(dx) > 50 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
-        this.settleAzimuth = startAzimuth; this.settleElevation = startElevation; this.settling = true; this.azimuthVelocity = 0;
-        this.selectSubject(this.subject + (dx < 0 ? 1 : -1));
-      }
+      if (e.type === 'pointerup' && Math.abs(dx) > 40 && Math.abs(dx) > 1.2 * Math.abs(dy)) this.selectSubject(this.subject + (dx < 0 ? 1 : -1));
     };
-    canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerdown', down);
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
     const key = (e: KeyboardEvent) => {
       if (this.presenting || e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
@@ -463,7 +489,7 @@ export class SpecimenViewer extends createSystem({}) {
     };
     window.addEventListener('keydown', key);
     this.cleanupFuncs.push(() => {
-      canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up);
       window.removeEventListener('keydown', key);
     });
@@ -514,7 +540,8 @@ export class SpecimenViewer extends createSystem({}) {
     const s = this.subjects[this.subject], motion = this.motions[this.cur.clip];
     this.guide.visible = true;
     s.rig.apply(motion, this.cur.t, true, this.points, this.confidence);
-    s.rig.shiftRoot(this.cur.offX, this.cur.offZ);
+    const w = this.shiftAt(this.cur.t);
+    s.rig.shiftRoot(this.cur.offX + this.cur.corrX * w, this.cur.offZ + this.cur.corrZ * w);
     if (this.blendLeft > 0) {
       const k = this.blendLeft / BLEND;
       s.rig.blend(k * k * (3 - 2 * k));
@@ -585,19 +612,6 @@ export class SpecimenViewer extends createSystem({}) {
     const height = Math.max(top / Math.max(.2, b - a), 2 * this.halfWidth() / (aspect * (portrait ? .94 : this.fieldFraction(aspect))));
     const distance = height / 2 / Math.tan(fov * Math.PI / 360);
     const targetY = top / 2 - (.5 - (a + b) / 2) * height;
-    // After a few idle seconds the specimen eases back to the front view.
-    if (this.settling) {
-      const k = Math.min(1, delta * 12);
-      this.azimuth += (this.settleAzimuth - this.azimuth) * k;
-      this.elevation += (this.settleElevation - this.elevation) * k;
-      if (Math.abs(this.settleAzimuth - this.azimuth) < 1e-3) this.settling = false;
-    } else if (this.idle > 4) {
-      this.azimuth = Math.atan2(Math.sin(this.azimuth), Math.cos(this.azimuth));
-      this.azimuth -= this.azimuth * Math.min(1, delta * .8);
-    } else if (this.idle > .05) this.azimuth += this.azimuthVelocity * delta;   // release inertia
-    this.azimuthVelocity *= Math.pow(.02, delta);
-    if (Math.abs(this.azimuthVelocity) < .01) this.azimuthVelocity = 0;
-    this.idle += delta;
     // Follow the specimen's hips loosely, so dodges read as movement against the room.
     this.subjects[this.subject].hips.getWorldPosition(this.tmp);
     this.follow += ((this.tmp.x - STAGE.x) * .55 - this.follow) * Math.min(1, delta * 2.5);

@@ -45,8 +45,9 @@ and its observed function becomes literally true:
 | Red paper flower (小红花) | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
 
 Three clean dodges or returns in a row earn an unprompted gloat. The trial log counts Dodged /
-Returned / Soaked / Flattered. Swipe left/right (or the masthead tabs) to change subject; drag to
-orbit; **Notes** opens the specimen card; **Save plate** renders this moment as a 3:4 field-guide
+Returned / Soaked / Flattered. After a dodge he steps back to his mark; every other response
+finishes on it too. Swipe left/right on the stage (or tap the masthead tabs) to change subject;
+the camera is fixed. **Notes** opens the specimen card; **Save plate** renders this moment as a 3:4 field-guide
 plate (1080×1440) to share or download (`src/plate.ts`). Keys: 1–4 throw, Space throws at random, ←/→ subject,
 N notes. The interface is in Chinese for Chinese-language browsers and English otherwise;
 `?lang=zh` or `?lang=en` overrides it. `?avatar=instructor|robot|croc` picks the subject, and old
