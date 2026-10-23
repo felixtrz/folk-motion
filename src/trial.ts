@@ -1,16 +1,15 @@
 import {
-  CanvasTexture, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
+  CanvasTexture, Color, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D,
   PlaneGeometry, Quaternion, SphereGeometry, Vector3,
 } from '@iwsdk/core';
-import { redFlower, shuttlecock, sodaCan, waterBalloon } from './scene-assets/props.scene-asset.js';
+import { ITEMS, type ItemId, type Kind, type LandCue } from './items.js';
 
-export type Kind = 'can' | 'shuttle' | 'balloon' | 'flower';
-const PROTOTYPES: Record<Kind, Object3D> = { can: sodaCan, shuttle: shuttlecock, balloon: waterBalloon, flower: redFlower };
+export type { Kind };
 const GRAVITY = -9.8;
-const REST: Record<Kind, number> = { can: .053, shuttle: .02, balloon: .08, flower: .01 };   // centre height when lying
+const PEARL = 0x2a1a12;
 
 type Prop = {
-  kind: Kind; object: Object3D; blob: Mesh; landed: boolean;
+  item: ItemId; kind: Kind; object: Object3D; blob: Mesh; landed: boolean;
   phase: 'idle' | 'flight' | 'free' | 'pinned';
   p: Vector3; v: Vector3; spin: Vector3; age: number; flight: number; fade: number;
   p0: Vector3; v0: Vector3; p1: Vector3; v1: Vector3; split: number;
@@ -25,12 +24,15 @@ type Prop = {
 export class Trial {
   readonly group = new Group();
   /** Called the first time a free prop strikes the floor hard. */
-  onLand: ((kind: Kind) => void) | null = null;
+  onLand: ((cue: LandCue) => void) | null = null;
   private readonly props: Prop[] = [];
   private readonly drops: InstancedMesh;
   private readonly dropP: Float32Array;
   private readonly dropV: Float32Array;
   private readonly dropLife: Float32Array;
+  private readonly dropSize: Float32Array;
+  private readonly color = new Color();
+  private shakeColor = 0x6fb8f2;
   private nextDrop = 0;
   private readonly m4 = new Matrix4();
   private readonly q = new Quaternion();
@@ -52,33 +54,32 @@ export class Trial {
     g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
     const blobMap = new CanvasTexture(c);
     const blobGeometry = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    const pools: [Kind, number][] = [['can', 3], ['shuttle', 3], ['balloon', 2], ['flower', 6]];
-    for (const [kind, count] of pools) for (let i = 0; i < count; i++) {
-      const object = PROTOTYPES[kind].clone(true); object.visible = false; object.userData.scale = object.scale.x;
+    for (const it of Object.values(ITEMS)) for (let i = 0; i < it.pool; i++) {
+      const object = it.proto.clone(true); object.visible = false; object.userData.scale = object.scale.x;
       const blob = new Mesh(blobGeometry, new MeshBasicMaterial({ map: blobMap, transparent: true, depthWrite: false, opacity: 0, fog: false }));
       blob.renderOrder = 3; blob.visible = false;
       this.group.add(object, blob);
-      this.props.push({ kind, object, blob, landed: false, phase: 'idle', p: new Vector3(), v: new Vector3(), spin: new Vector3(), age: 0, flight: 0, fade: 0, p0: new Vector3(), v0: new Vector3(), p1: new Vector3(), v1: new Vector3(), split: 0, onArrive: null });
+      this.props.push({ item: it.id, kind: it.kind, object, blob, landed: false, phase: 'idle', p: new Vector3(), v: new Vector3(), spin: new Vector3(), age: 0, flight: 0, fade: 0, p0: new Vector3(), v0: new Vector3(), p1: new Vector3(), v1: new Vector3(), split: 0, onArrive: null });
     }
-    // Water droplets: one instanced mesh, recycled ring buffer.
-    const N = 220;
-    this.drops = new InstancedMesh(new SphereGeometry(.016, 8, 6), new MeshStandardMaterial({ color: 0x6fb8f2, roughness: .1, transparent: true, opacity: .85 }), N);
+    // Droplets (water, coffee, milk tea and its pearls): one instanced mesh, recycled ring buffer.
+    const N = 240;
+    this.drops = new InstancedMesh(new SphereGeometry(.016, 8, 6), new MeshStandardMaterial({ color: 0xffffff, roughness: .15, transparent: true, opacity: .9 }), N);
     this.drops.name = 'Droplets'; this.drops.frustumCulled = false;
-    this.dropP = new Float32Array(N * 3); this.dropV = new Float32Array(N * 3); this.dropLife = new Float32Array(N);
+    this.dropP = new Float32Array(N * 3); this.dropV = new Float32Array(N * 3); this.dropLife = new Float32Array(N); this.dropSize = new Float32Array(N);
     this.m4.makeScale(0, 0, 0);
-    for (let i = 0; i < N; i++) this.drops.setMatrixAt(i, this.m4);
+    for (let i = 0; i < N; i++) { this.drops.setMatrixAt(i, this.m4); this.drops.setColorAt(i, this.color.set(0x6fb8f2)); }
     this.group.add(this.drops);
   }
 
-  /** Is a prop of this kind free to throw? */
-  available(kind: Kind): boolean { return this.props.some(p => p.kind === kind && p.phase === 'idle'); }
+  /** Is one of these free to throw? */
+  available(item: ItemId): boolean { return this.props.some(p => p.item === item && p.phase === 'idle'); }
 
   /**
    * Throws `kind` from `from` so it reaches `to` exactly `duration` seconds from now, then
    * calls onArrive (the moment the clip's key frame plays).
    */
-  launch(kind: Kind, from: Vector3, to: Vector3, duration: number, onArrive: (prop: Prop) => void, via?: Vector3, viaTime = 0): void {
-    const prop = this.props.find(p => p.kind === kind && p.phase === 'idle');
+  launch(item: ItemId, from: Vector3, to: Vector3, duration: number, onArrive: (prop: Prop) => void, via?: Vector3, viaTime = 0): void {
+    const prop = this.props.find(p => p.item === item && p.phase === 'idle');
     if (!prop) return;
     prop.phase = 'flight'; prop.age = 0; prop.flight = duration; prop.fade = 0; prop.onArrive = onArrive; prop.landed = false;
     prop.p0.copy(from); prop.p.copy(from);
@@ -88,9 +89,8 @@ export class Trial {
     this.ballistic(from, end, prop.split, prop.v0);
     if (via) { prop.p1.copy(via); this.ballistic(via, to, duration - viaTime, prop.v1); }
     prop.v.copy(prop.v0);
-    prop.spin.set((Math.random() - .5) * 14, (Math.random() - .5) * 10, (Math.random() - .5) * 14);
-    if (kind === 'flower') prop.spin.set(0, 0, 9);
-    if (kind === 'shuttle') prop.spin.set(0, 12, 0);
+    const spin = ITEMS[item].spin;
+    if (spin) prop.spin.set(...spin); else prop.spin.set((Math.random() - .5) * 14, (Math.random() - .5) * 10, (Math.random() - .5) * 14);
     prop.object.position.copy(from); prop.object.quaternion.identity(); prop.object.scale.setScalar(prop.object.userData.scale);
     prop.object.visible = true;
     if (prop.object.parent !== this.group) this.group.attach(prop.object);
@@ -114,13 +114,19 @@ export class Trial {
   /** Pins a prop to a bone, keeping its world placement (the flower on the chest). */
   pin(prop: Prop, bone: Object3D): void { bone.attach(prop.object); prop.phase = 'pinned'; prop.blob.visible = false; }
 
-  /** Bursts a prop into a splash of droplets thrown away from the body, toward `away`. */
+  /** Splashes a prop's contents away from the body, toward `away`. A balloon bursts; a cup
+   *  survives and drops to the floor; milk tea throws its pearls too. */
   burst(prop: Prop, away: Vector3): void {
-    prop.object.visible = false; prop.blob.visible = false; prop.phase = 'idle';
-    for (let i = 0; i < 70; i++) {
+    const splash = ITEMS[prop.item].splash ?? { color: 0x6fb8f2 };
+    this.shakeColor = splash.color;
+    const at = this.s.copy(prop.p);
+    if (splash.shell) this.release(prop, this.t2.copy(away).multiplyScalar(.6).setY(.8), this.t1.set(7, 0, 5));
+    else { prop.object.visible = false; prop.blob.visible = false; prop.phase = 'idle'; }
+    for (let i = 0; i < 70 + (splash.pearls ? 16 : 0); i++) {
+      const pearl = splash.pearls && i >= 70;
       this.t1.set(Math.random() - .5, Math.random() * .9 + .1, Math.random() - .5).normalize().multiplyScalar(1.2 + Math.random() * 2.2);
       this.t1.addScaledVector(away, .8 + Math.random() * 1.4);
-      this.spawnDrop(prop.p, this.t1);
+      this.spawnDrop(at, this.t1, pearl ? PEARL : splash.color, pearl ? .75 : 1);
     }
   }
 
@@ -167,11 +173,13 @@ export class Trial {
     } else {
       prop.v.y += GRAVITY * dt;
       prop.p.addScaledVector(prop.v, dt);
-      const rest = REST[prop.kind];
+      const rest = ITEMS[prop.item].rest;
       if (prop.p.y < rest) {
         prop.p.y = rest;
         if (prop.v.y < -.6) {
-          if (!prop.landed) { prop.landed = true; this.onLand?.(prop.kind); } prop.v.y *= -(prop.kind === 'can' ? .35 : .2); prop.v.x *= .7; prop.v.z *= .7; prop.spin.multiplyScalar(.6); }
+          if (!prop.landed) { prop.landed = true; this.onLand?.(ITEMS[prop.item].land); }
+          prop.v.y *= -ITEMS[prop.item].bounce; prop.v.x *= .7; prop.v.z *= .7; prop.spin.multiplyScalar(.6);
+        }
         else { prop.v.y = 0; prop.v.x *= Math.pow(.05, dt); prop.v.z *= Math.pow(.05, dt); prop.spin.multiplyScalar(Math.pow(.02, dt)); }
       }
       this.orient(prop, dt);
@@ -191,14 +199,15 @@ export class Trial {
   }
 
   private orient(prop: Prop, dt: number): void {
-    if (prop.kind === 'shuttle' && prop.v.lengthSq() > .5) {
+    const trail = ITEMS[prop.item].trail;
+    if (trail && prop.v.lengthSq() > .5) {
       // A shuttlecock flies base first: its feathers (+Y) trail the velocity.
       this.t1.copy(prop.v).normalize().negate();
       this.q.setFromUnitVectors(this.up, this.t1);
       prop.object.quaternion.slerp(this.q, Math.min(1, dt * 10));
       return;
     }
-    if (prop.kind === 'shuttle' && prop.p.y <= REST.shuttle + .001) {
+    if (trail && prop.p.y <= ITEMS[prop.item].rest + .001) {
       this.q.identity(); prop.object.quaternion.slerp(this.q, Math.min(1, dt * 8)); return;
     }
     const w = prop.spin.length();
@@ -210,8 +219,10 @@ export class Trial {
     prop.object.visible = false; prop.blob.visible = false; prop.phase = 'idle'; prop.onArrive = null;
   }
 
-  private spawnDrop(at: Vector3, velocity: Vector3): void {
+  private spawnDrop(at: Vector3, velocity: Vector3, color = this.shakeColor, size = 1): void {
     const i = this.nextDrop; this.nextDrop = (this.nextDrop + 1) % this.dropLife.length;
+    this.drops.setColorAt(i, this.color.set(color)); this.dropSize[i] = size;
+    if (this.drops.instanceColor) this.drops.instanceColor.needsUpdate = true;
     this.dropP[i * 3] = at.x; this.dropP[i * 3 + 1] = at.y; this.dropP[i * 3 + 2] = at.z;
     this.dropV[i * 3] = velocity.x; this.dropV[i * 3 + 1] = velocity.y; this.dropV[i * 3 + 2] = velocity.z;
     this.dropLife[i] = 2.2;
@@ -248,7 +259,7 @@ export class Trial {
       }
       const onFloor = this.dropP[o + 1] <= .004;
       const life = Math.max(0, this.dropLife[i]);
-      const k = Math.min(1, life / .5);
+      const k = Math.min(1, life / .5) * this.dropSize[i];
       // On the floor a drop spreads into a flat spot and fades.
       this.s.set(onFloor ? 2.2 * k : k, onFloor ? .15 * k : k, onFloor ? 2.2 * k : k);
       this.m4.compose(this.t1.set(this.dropP[o], this.dropP[o + 1], this.dropP[o + 2]), this.q.identity(), this.s);

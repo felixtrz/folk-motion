@@ -37,12 +37,12 @@ A field trial. The specimen stands at rest (specimen 0, *Status expectans*); tap
 the tray and it is thrown at him from the button you pressed. He responds with a recorded move,
 and its observed function becomes literally true:
 
-| Throw | Response | Observed function |
+| Tray slot (cycles after each throw) | Response | Observed function |
 |---|---|---|
-| Soda can | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
-| Shuttlecock (毽子) | 浪子踢球, kicks it back up with the raised foot | Kicking a ball that is not there. |
-| Water balloon | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
-| Red paper flower (小红花) | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
+| Soda can → beer bottle → 拖鞋 slipper | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
+| 毽子 → football → 包子 | 浪子踢球, kicks it back up with the raised foot | Kicking a ball that is not there. |
+| Water balloon → coffee → 珍珠奶茶 | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
+| 小红花 → gold medal → 红包 | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
 
 Three clean dodges or returns in a row earn an unprompted gloat. The trial log counts Dodged /
 Returned / Soaked / Flattered. After a dodge he steps back to his mark; every other response
@@ -56,7 +56,7 @@ plate links (`?specimen=3&t=3.4`) still open that plate as recorded.
 Each throw is choreographed to its recording: the flight is timed and aimed (from the posed rig)
 so the thing arrives on the clip's key frame. Clips cross-fade and play relative to where he
 stands (`src/specimen-viewer.ts`); the props, splash and pinned flowers live in `src/trial.ts`
-(`src/scene-assets/props.scene-asset.ts` for the models); sound is synthesised (`src/sfx.ts`).
+(`src/items.ts` maps each throwable to its response and physics; `src/scene-assets/props.scene-asset.ts` has the models); sound is synthesised (`src/sfx.ts`).
 
 ## How it looks the way it does
 

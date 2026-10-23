@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, Group, LatheGeometry, Mesh, MeshStandardMaterial,
-  SphereGeometry, TorusGeometry, Vector2,
+  BoxGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, LatheGeometry, Mesh,
+  MeshStandardMaterial, SphereGeometry, TorusGeometry, Vector2, Vector3,
 } from '@iwsdk/core';
 
 // Things to throw at the specimen. Each is a parentless prototype, origin at its centre,
@@ -78,4 +78,112 @@ export const redFlower = new Group(); redFlower.name = 'RedFlower';
     ribbon.name = `Ribbon${side}`; ribbon.position.set(side * .016, -.07, -.004); ribbon.rotation.z = side * .25;
     redFlower.add(ribbon);
   }
+}
+
+// ---- Second and third items in each tray slot -------------------------------------------
+
+/** Beer bottle: green glass, axis +Y, 36 cm, crown cap and a cream label. */
+export const beerBottle = new Group(); beerBottle.name = 'BeerBottle';
+{
+  const glass = new MeshStandardMaterial({ color: 0x2c6a3a, roughness: .12, metalness: .1, transparent: true, opacity: .9 });
+  const profile = [[0, -.18], [.052, -.18], [.058, -.172], [.058, .04], [.05, .075], [.024, .12], [.019, .16], [.021, .172], [.019, .18], [0, .18]]
+    .map(([x, y]) => new Vector2(x, y));
+  const body = new Mesh(new LatheGeometry(profile, 24), glass); body.name = 'Glass'; beerBottle.add(body);
+  const label = new Mesh(new CylinderGeometry(.0585, .0585, .09, 24, 1, true), mat(0xefe6cf, .6)); label.name = 'Label'; label.position.y = -.05; beerBottle.add(label);
+  const cap = new Mesh(new CylinderGeometry(.022, .022, .012, 14), mat(0xc9a64a, .35, .8)); cap.name = 'Cap'; cap.position.y = .184; beerBottle.add(cap);
+}
+
+/** 拖鞋, the flying slipper: flat sole along +Z, strap across the toe, 40 cm. */
+export const slipper = new Group(); slipper.name = 'Slipper';
+{
+  const sole = new Mesh(new CylinderGeometry(1, 1, 1, 24).scale(.075, .028, .2), mat(0x2f62b0, .7)); sole.name = 'Sole'; slipper.add(sole);
+  const foot = new Mesh(new CylinderGeometry(1, 1, 1, 24).scale(.068, .006, .19), mat(0xdfe6ef, .8)); foot.name = 'Footbed'; foot.position.y = .016; slipper.add(foot);
+  const strap = new Mesh(new TorusGeometry(.07, .022, 8, 18, Math.PI), mat(0xf2f2ee, .6)); strap.name = 'Strap';
+  strap.scale.set(1, .55, 1); strap.position.set(0, .016, .07); slipper.add(strap);
+}
+
+/** Football: 30 cm, white with black pentagon patches (flat-shaded, low poly). */
+export const football = new Group(); football.name = 'Football';
+{
+  const geometry = new IcosahedronGeometry(.15, 2).toNonIndexed();
+  const pos = geometry.getAttribute('position'), colors: number[] = [];
+  const corners = new IcosahedronGeometry(1, 0).getAttribute('position');
+  const v = new Vector3(), c = new Vector3();
+  for (let f = 0; f < pos.count; f += 3) {
+    c.set(0, 0, 0);
+    for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, f + k));
+    c.normalize();
+    let black = false;
+    for (let i = 0; i < corners.count; i++) if (c.dot(v.fromBufferAttribute(corners, i).normalize()) > .94) black = true;
+    for (let k = 0; k < 3; k++) colors.push(...(black ? [.07, .07, .07] : [.95, .95, .93]));
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  const ball = new Mesh(geometry, new MeshStandardMaterial({ vertexColors: true, roughness: .5, flatShading: true }));
+  ball.name = 'Ball'; football.add(ball);
+}
+
+/** 包子, a steamed bun: soft dome with a pleated twist on top, 17 cm across. */
+export const bun = new Group(); bun.name = 'SteamedBun';
+{
+  const dough = mat(0xf3eee1, .9);
+  const dome = new Mesh(new SphereGeometry(.085, 20, 12, 0, Math.PI * 2, 0, Math.PI * .62), dough);
+  dome.name = 'Dome'; dome.scale.set(1, .72, 1); dome.position.y = -.03; bun.add(dome);
+  const base = new Mesh(new CylinderGeometry(.083, .075, .02, 20), dough); base.name = 'Base'; base.position.y = -.04; bun.add(base);
+  for (let i = 0; i < 8; i++) {
+    const pleat = new Mesh(new ConeGeometry(.012, .04, 5), dough); pleat.name = `Pleat${i}`;
+    const a = i / 8 * Math.PI * 2;
+    pleat.position.set(Math.sin(a) * .016, .035, Math.cos(a) * .016); pleat.rotation.set(Math.cos(a) * .5, 0, -Math.sin(a) * .5);
+    bun.add(pleat);
+  }
+}
+
+/** Paper cup of coffee: tapered white cup, kraft sleeve, domed lid, 21 cm. */
+export const coffeeCup = new Group(); coffeeCup.name = 'CoffeeCup';
+{
+  const cup = new Mesh(new CylinderGeometry(.06, .044, .19, 22), mat(0xf4f1ea, .7)); cup.name = 'Cup'; coffeeCup.add(cup);
+  const sleeve = new Mesh(new CylinderGeometry(.0565, .0495, .07, 22, 1, true), mat(0xa8774a, .85)); sleeve.name = 'Sleeve'; sleeve.position.y = -.005; coffeeCup.add(sleeve);
+  const lid = new Mesh(new CylinderGeometry(.056, .064, .022, 22), mat(0xe9e5dc, .5)); lid.name = 'Lid'; lid.position.y = .105; coffeeCup.add(lid);
+  const dome = new Mesh(new SphereGeometry(.05, 18, 8, 0, Math.PI * 2, 0, Math.PI * .3), mat(0xe9e5dc, .5)); dome.name = 'LidDome'; dome.position.y = .09; coffeeCup.add(dome);
+}
+
+/** 珍珠奶茶: clear cup of milk tea with tapioca pearls, sealed top, fat striped straw, 27 cm. */
+export const bubbleTea = new Group(); bubbleTea.name = 'BubbleTea';
+{
+  const cup = new Mesh(new CylinderGeometry(.06, .048, .2, 22), new MeshStandardMaterial({ color: 0xffffff, roughness: .1, transparent: true, opacity: .35 }));
+  cup.name = 'Cup'; bubbleTea.add(cup);
+  const tea = new Mesh(new CylinderGeometry(.056, .045, .17, 20), mat(0xd2ab82, .5)); tea.name = 'MilkTea'; tea.position.y = -.012; bubbleTea.add(tea);
+  const pearl = new SphereGeometry(.011, 8, 6), dark = mat(0x2a1a12, .3);
+  for (let i = 0; i < 16; i++) {
+    const p = new Mesh(pearl, dark); p.name = `Pearl${i}`;
+    const a = i * 2.39996, r = .012 + (i % 4) * .009;
+    p.position.set(Math.sin(a) * r, -.085 + Math.floor(i / 8) * .02, Math.cos(a) * r);
+    bubbleTea.add(p);
+  }
+  const seal = new Mesh(new CylinderGeometry(.061, .061, .006, 22), mat(0xf4efe4, .6)); seal.name = 'Seal'; seal.position.y = .1; bubbleTea.add(seal);
+  const straw = new Mesh(new CylinderGeometry(.009, .009, .2, 10), mat(0xe86b8c, .5)); straw.name = 'Straw';
+  straw.position.set(.015, .16, 0); straw.rotation.z = -.18; bubbleTea.add(straw);
+}
+
+/** Gold medal: faces +Z, disc 10 cm with a raised rim and a red ribbon above. */
+export const goldMedal = new Group(); goldMedal.name = 'GoldMedal';
+{
+  const gold = mat(0xd4a73a, .3, .9);
+  const disc = new Mesh(new CylinderGeometry(.05, .05, .01, 28).rotateX(Math.PI / 2), gold); disc.name = 'Disc'; goldMedal.add(disc);
+  const rim = new Mesh(new TorusGeometry(.046, .004, 6, 28), gold); rim.name = 'Rim'; rim.position.z = .006; goldMedal.add(rim);
+  const star = new Mesh(new CylinderGeometry(.022, .022, .004, 5).rotateX(Math.PI / 2), mat(0xe9c45a, .3, .9)); star.name = 'Star'; star.position.z = .007; goldMedal.add(star);
+  for (const side of [-1, 1]) {
+    const ribbon = new Mesh(new BoxGeometry(.03, .1, .003), mat(0xc0222c, .7)); ribbon.name = `Ribbon${side}`;
+    ribbon.position.set(side * .017, .085, -.003); ribbon.rotation.z = side * -.32; goldMedal.add(ribbon);
+  }
+}
+
+/** 红包, a red envelope: faces +Z, 10 x 16 cm, with a gold seal. */
+export const redEnvelope = new Group(); redEnvelope.name = 'RedEnvelope';
+{
+  const env = new Mesh(new BoxGeometry(.1, .16, .008), mat(0xc81f2a, .6)); env.name = 'Envelope'; redEnvelope.add(env);
+  const flap = new Mesh(new ConeGeometry(.071, .05, 4).rotateZ(Math.PI).rotateY(Math.PI / 4).scale(1, 1, .08), mat(0xb01a24, .6));
+  flap.name = 'Flap'; flap.position.set(0, .055, .005); redEnvelope.add(flap);
+  const seal = new Mesh(new CylinderGeometry(.018, .018, .004, 20).rotateX(Math.PI / 2), mat(0xd9b04a, .3, .85)); seal.name = 'GoldSeal'; seal.position.set(0, .03, .007); redEnvelope.add(seal);
+  const band = new Mesh(new BoxGeometry(.07, .006, .002), mat(0xd9b04a, .3, .85)); band.name = 'GoldBand'; band.position.set(0, -.045, .005); redEnvelope.add(band);
 }

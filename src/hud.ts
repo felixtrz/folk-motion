@@ -22,13 +22,29 @@ const STUDIO = 'https://elixr.games/';
 // The studio's wordmark, as a publisher's imprint: black on paper, links out.
 const IMPRINT = `<a class="imprint" href="${STUDIO}" target="_blank" rel="noopener" aria-label="${T.studio}" title="${T.studio}">`
   + `<img src="${import.meta.env.BASE_URL}brand/elixr-games-black.svg" alt="EliXR Games" width="47" height="15"></a>`;
-// Line drawings of the four throwables, drawn like specimen-plate figures.
+// Line drawings of the throwables, drawn like specimen-plate figures: [slot][variant].
 const ICONS = [
-  '<path d="M11 6.5h10l1.5 2v15l-1.5 2H11l-1.5-2v-15z"/><path d="M9.5 12.5h13M9.5 19.5h13M14 4.8h4"/>',
-  '<path d="M12.5 26.5h7v-3.2h-7zM16 23.3V18M16 18L9 5M16 18l-3.5-13.5M16 18V4.5M16 18l3.5-13.5M16 18l7-13"/>',
-  '<path d="M16 4.5c-5 0-8.5 4-8.5 9 0 5.6 4.4 9.6 8.5 10.5 4.1-.9 8.5-4.9 8.5-10.5 0-5-3.5-9-8.5-9z"/><path d="M14.6 24.6h2.8L16 26.4zM16 26.4c-1.2 1.6 1.2 2.4 0 4"/>',
-  '<circle cx="16" cy="13" r="2.6"/><circle cx="16" cy="7.6" r="3.2"/><circle cx="20.7" cy="10.3" r="3.2"/><circle cx="20.7" cy="15.7" r="3.2"/><circle cx="16" cy="18.4" r="3.2"/><circle cx="11.3" cy="15.7" r="3.2"/><circle cx="11.3" cy="10.3" r="3.2"/><path d="M13.6 20.8l-2.2 7 2.3-1.1 1.3 2 .9-7.4M18.4 20.8l2.2 7-2.3-1.1-1.3 2-.9-7.4"/>',
-].map(d => `<svg viewBox="0 0 32 32" aria-hidden="true">${d}</svg>`);
+  [
+    '<path d="M11 6.5h10l1.5 2v15l-1.5 2H11l-1.5-2v-15z"/><path d="M9.5 12.5h13M9.5 19.5h13M14 4.8h4"/>',
+    '<path d="M14 3.5h4v4.5c0 1 3 2.5 3 5.5V28H11V13.5c0-3 3-4.5 3-5.5z"/><path d="M11 17h10M11 23h10"/>',
+    '<path d="M16 3.5c4 0 6 3 6 8.5 0 6-1.5 9-1.5 12.5 0 2.5-2 4-4.5 4s-4.5-1.5-4.5-4c0-3.5-1.5-6.5-1.5-12.5 0-5.5 2-8.5 6-8.5z"/><path d="M10.4 10.5c3.4 2 7.8 2 11.2 0"/>',
+  ],
+  [
+    '<path d="M12.5 26.5h7v-3.2h-7zM16 23.3V18M16 18L9 5M16 18l-3.5-13.5M16 18V4.5M16 18l3.5-13.5M16 18l7-13"/>',
+    '<circle cx="16" cy="16" r="11.5"/><path d="M16 11.2l4.3 3.1-1.6 5h-5.4l-1.6-5zM16 4.5v6.7M20.3 14.3l6.4-2M18.7 19.3l3.9 5.4M13.3 19.3l-3.9 5.4M11.7 14.3l-6.4-2"/>',
+    '<path d="M5 21.5c0-6.5 5-11.5 11-11.5s11 5 11 11.5c0 2-1.5 3-3.5 3h-15c-2 0-3.5-1-3.5-3z"/><path d="M13 11l3 2.5 3-2.5M16 13.5V9"/>',
+  ],
+  [
+    '<path d="M16 4.5c-5 0-8.5 4-8.5 9 0 5.6 4.4 9.6 8.5 10.5 4.1-.9 8.5-4.9 8.5-10.5 0-5-3.5-9-8.5-9z"/><path d="M14.6 24.6h2.8L16 26.4zM16 26.4c-1.2 1.6 1.2 2.4 0 4"/>',
+    '<path d="M10 9.5h12l-1.6 18H11.6z"/><path d="M9 6.5h14v3H9zM10.8 15h10.4M11.2 21h9.6"/>',
+    '<path d="M10 10h12l-1.8 18h-8.4z"/><path d="M9.5 8h13v2h-13zM17 8l2.5-5"/><circle cx="13.5" cy="24" r="1.1"/><circle cx="16.5" cy="25" r="1.1"/><circle cx="18.8" cy="23.2" r="1.1"/>',
+  ],
+  [
+    '<circle cx="16" cy="13" r="2.6"/><circle cx="16" cy="7.6" r="3.2"/><circle cx="20.7" cy="10.3" r="3.2"/><circle cx="20.7" cy="15.7" r="3.2"/><circle cx="16" cy="18.4" r="3.2"/><circle cx="11.3" cy="15.7" r="3.2"/><circle cx="11.3" cy="10.3" r="3.2"/><path d="M13.6 20.8l-2.2 7 2.3-1.1 1.3 2 .9-7.4M18.4 20.8l2.2 7-2.3-1.1-1.3 2-.9-7.4"/>',
+    '<path d="M11 3.5l5 8 5-8"/><circle cx="16" cy="20" r="7.5"/><path d="M16 15.8l1.3 2.7 2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4z"/>',
+    '<rect x="9" y="4.5" width="14" height="23" rx="1.5"/><path d="M9 9.5l7 5 7-5"/><circle cx="16" cy="18" r="2.6"/>',
+  ],
+].map(slot => slot.map(d => `<svg viewBox="0 0 32 32" aria-hidden="true">${d}</svg>`));
 
 /** The 2D field-guide overlay. Writes to the DOM only when a value actually changes. */
 export class Hud {
@@ -39,6 +55,8 @@ export class Hud {
   private soundOn: boolean;
   private gloss = '';
   private plateFile: File | null = null;
+  private busy = false;
+  private readonly pendingFlips = new Map<number, number>();
   private plateUrl = '';
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers, soundOn: boolean) {
@@ -64,7 +82,7 @@ export class Hud {
           ${T.log.map((label, i) => `<div><dt>${label}</dt><dd data-k="log${i}">00</dd></div>`).join('')}
         </dl>
         <nav class="tray" data-k="tray">
-          ${T.items.map(([label, title], i) => `<button class="item" data-i="${i}" aria-label="${title}" title="${title}"><span class="code">${String(i + 1).padStart(2, '0')}</span>${ICONS[i]}<span class="label">${label}</span></button>`).join('')}
+          ${T.items.map((_, i) => `<button class="item" data-i="${i}"></button>`).join('')}
         </nav>
         <div class="foot-row">
           <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">${T.notesButton}</button>
@@ -101,6 +119,7 @@ export class Hud {
         group.append(b);
       });
     }
+    this.el.tray.querySelectorAll<HTMLButtonElement>('.item').forEach((b, i) => this.paintCard(i, 0));
     this.el.tray.querySelectorAll<HTMLButtonElement>('.item').forEach(b => b.addEventListener('click', () => {
       const r = b.getBoundingClientRect();
       this.on.throw(Number(b.dataset.i), r.left + r.width / 2, r.top + r.height * .45);
@@ -148,7 +167,34 @@ export class Hud {
   /** While the specimen is busy reacting, the tray rests. */
   setBusy(busy: boolean): void {
     this.el.tray.classList.toggle('busy', busy);
-    if (!busy) this.setActive(-1);
+    this.busy = busy;
+    if (!busy) {
+      this.setActive(-1);
+      // Cards flip to their next item once he has finished responding.
+      this.pendingFlips.forEach((variant, slot) => this.flipNow(slot, variant));
+      this.pendingFlips.clear();
+    }
+  }
+
+  /** Shows the next thing in a slot's family (flips when the specimen is free again). */
+  flipCard(slot: number, variant: number): void {
+    if (this.busy) this.pendingFlips.set(slot, variant); else this.flipNow(slot, variant);
+  }
+  private flipNow(slot: number, variant: number): void {
+    const card = this.el.tray.querySelectorAll<HTMLElement>('.item')[slot];
+    card.classList.add('flip-out');
+    setTimeout(() => {
+      this.paintCard(slot, variant);
+      card.classList.remove('flip-out'); card.classList.add('flip-in');
+      setTimeout(() => card.classList.remove('flip-in'), 220);
+    }, 200);
+  }
+  private paintCard(slot: number, variant: number): void {
+    const card = this.el.tray.querySelectorAll<HTMLElement>('.item')[slot];
+    const [label, title] = T.items[slot][variant];
+    card.setAttribute('aria-label', title); card.title = title;
+    const dots = T.items[slot].map((_, k) => `<i class="${k === variant ? 'on' : ''}"></i>`).join('');
+    card.innerHTML = `<span class="code">${String(slot + 1).padStart(2, '0')}</span><span class="dots">${dots}</span>${ICONS[slot][variant]}<span class="label">${label}</span>`;
   }
   /** The card just thrown stays inked while the specimen responds ("recording"). */
   setActive(index: number): void {

@@ -1,5 +1,5 @@
 /** Tiny synthesised sound effects (no audio files). Created on the first user gesture. */
-export type Cue = 'throw' | 'clank' | 'kick' | 'splash' | 'chime' | 'swoosh';
+export type Cue = 'throw' | 'clank' | 'clink' | 'thud' | 'kick' | 'splash' | 'chime' | 'swoosh';
 
 const KEY = 'fms-sound';
 
@@ -45,6 +45,8 @@ export class Sfx {
         for (const [f, g] of [[1830, .18], [2470, .12], [3120, .08]]) this.tone(t, f, .25, g, 'triangle');
         this.burst(t, .05, 4000, .25);
         break;
+      case 'clink': for (const [f, g] of [[2900, .12], [4300, .07]]) this.tone(t, f, .35, g, 'sine'); break;
+      case 'thud': this.tone(t, 110, .18, .5, 'sine', 55); this.burst(t, .06, 900, .25); break;
       case 'kick': this.tone(t, 180, .12, .5, 'sine', 420); this.burst(t, .03, 2500, .2); break;
       case 'splash': this.burst(t, .5, 1400, .55); this.tone(t, 300, .08, .25, 'sine', 90); break;
       case 'chime': for (const [f, d] of [[1318.5, 0], [1975.5, .07]]) this.tone(t + d, f, .9, .14, 'sine'); break;

@@ -10,13 +10,14 @@ import { MOVES, validateMotion, type Motion } from './motion.js';
 import { SPECIMENS } from './specimens.js';
 import { Sfx } from './sfx.js';
 import { Trial, type Kind, type Prop } from './trial.js';
+import { ITEMS, SLOTS } from './items.js';
 import { composePlate, PLATE_W, SHOT_H } from './plate.js';
 import { T } from './i18n.js';
 
 const PAPER = 0xf7f7f5;   // far floor, horizon and page; the light pool under the subject is brighter
 const STAGE = new Vector3(.7, 0, -2.8);
 const AVATARS = ['instructor', 'robot', 'croc'] as const;
-const KINDS: Kind[] = ['can', 'shuttle', 'balloon', 'flower'];
+const KINDS: Kind[] = ['can', 'shuttle', 'balloon', 'flower'];   // tray slot order = trial log order
 const BLEND = .28;          // seconds to fade from one recording into another
 const TRIAL_HALF_WIDTH = .82;
 
@@ -98,6 +99,7 @@ export class SpecimenViewer extends createSystem({}) {
   private seekRequest: { clip: number; t: number } | null = null;
   private timeScale = 1;   // review only: slow motion for inspecting contacts
   private lastOutcome = -1;
+  private readonly variant = [0, 0, 0, 0];   // which item each tray slot throws next
   private readonly size = new Vector2();
 
   init(): void {
@@ -180,7 +182,7 @@ export class SpecimenViewer extends createSystem({}) {
     group.add(this.shadow.plane, this.contact.plane);
     this.cleanupFuncs.push(() => { this.shadow.dispose(); this.contact.dispose(); });
     this.trial = new Trial();
-    this.trial.onLand = kind => this.sfx.play(kind === 'can' ? 'clank' : 'kick');
+    this.trial.onLand = cue => this.sfx.play(cue);
     group.add(this.trial.group);
     this.cleanupFuncs.push(() => this.trial.dispose());
     this.world.requireSceneObject('PracticeStage').getObjectByName('ShadowCatcher')!.visible = false;
@@ -328,8 +330,10 @@ export class SpecimenViewer extends createSystem({}) {
   /** Throws thing `index` from screen point (x, y): the specimen responds on the key frame. */
   private throwAt(index: number, x: number, y: number): void {
     if (!this.ready || this.presenting || this.busy) return;
-    const kind = KINDS[index];
-    if (!kind || !this.trial.available(kind)) return;
+    const slot = SLOTS[index];
+    if (!slot) return;
+    const item = slot[this.variant[index] % slot.length], kind = ITEMS[item].kind;
+    if (!this.trial.available(item)) return;
     if (this.manual) { this.manual = false; this.anchorX = this.anchorZ = 0; this.bandDirty = true; }
     this.sfx.wake(); this.sfx.play('throw');
     navigator.vibrate?.(8);
@@ -363,7 +367,10 @@ export class SpecimenViewer extends createSystem({}) {
       const [px, py] = PINS[this.trial.pinnedOn(s.rig.bone(2)) % PINS.length];
       this.probe(key, 2, this.tmp.set(px, py, depth + .01), this.aim);
     }
-    this.trial.launch(kind, this.from, this.aim, flight, prop => this.arrive(kind, prop));
+    this.trial.launch(item, this.from, this.aim, flight, prop => this.arrive(kind, prop));
+    // The card flips to the next thing in its family.
+    this.variant[index] = (this.variant[index] + 1) % slot.length;
+    this.hud.flipCard(index, this.variant[index]);
     this.hud.setActive(index);
     this.hud.showBehaviour(clip, this.stats[clip]);
   }
