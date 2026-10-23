@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, LatheGeometry, Mesh,
+  BoxGeometry, BufferGeometry, ConeGeometry, CylinderGeometry, Float32BufferAttribute, Group, IcosahedronGeometry, LatheGeometry, Mesh,
   MeshStandardMaterial, SphereGeometry, TorusGeometry, Vector2, Vector3,
 } from '@iwsdk/core';
 
@@ -186,4 +186,107 @@ export const redEnvelope = new Group(); redEnvelope.name = 'RedEnvelope';
   flap.name = 'Flap'; flap.position.set(0, .055, .005); redEnvelope.add(flap);
   const seal = new Mesh(new CylinderGeometry(.018, .018, .004, 20).rotateX(Math.PI / 2), mat(0xd9b04a, .3, .85)); seal.name = 'GoldSeal'; seal.position.set(0, .03, .007); redEnvelope.add(seal);
   const band = new Mesh(new BoxGeometry(.07, .006, .002), mat(0xd9b04a, .3, .85)); band.name = 'GoldBand'; band.position.set(0, -.045, .005); redEnvelope.add(band);
+}
+
+// ---- Fourth and fifth items ---------------------------------------------------------------
+
+/** 黑板擦, the blackboard eraser: varnished wood back, grey felt face, 22 cm. */
+export const boardEraser = new Group(); boardEraser.name = 'BoardEraser';
+{
+  const wood = new Mesh(new BoxGeometry(.22, .045, .085), mat(0xb5834f, .5)); wood.name = 'WoodBack'; wood.position.y = .012; boardEraser.add(wood);
+  const felt = new Mesh(new BoxGeometry(.215, .025, .08), mat(0x55575a, .95)); felt.name = 'Felt'; felt.position.y = -.022; boardEraser.add(felt);
+  const chalk = new Mesh(new BoxGeometry(.2, .004, .07), mat(0xf2f1ec, 1)); chalk.name = 'ChalkDust'; chalk.position.y = -.036; boardEraser.add(chalk);
+}
+
+/** 鸡毛掸子, the feather duster: bamboo handle along +Y, a fluffy head of rooster feathers, 60 cm. */
+export const featherDuster = new Group(); featherDuster.name = 'FeatherDuster';
+{
+  const handle = new Mesh(new CylinderGeometry(.011, .013, .34, 10), mat(0xc9a86a, .6)); handle.name = 'Handle'; handle.position.y = -.13; featherDuster.add(handle);
+  const plume = new ConeGeometry(.02, .2, 5).translate(0, .1, 0);
+  const tones = [0x3b2a20, 0x8a4a22, 0x1f1a17, 0xa8642e];
+  for (let i = 0; i < 26; i++) {
+    const pivot = new Group(); pivot.name = `Feather${i}`;
+    const ring = i % 3, a = i * 2.39996;
+    pivot.position.y = .02 + ring * .07;
+    pivot.rotation.set(.35 + ring * .12, a, 0, 'YXZ');
+    pivot.add(new Mesh(plume, mat(tones[i % tones.length], .9)));
+    featherDuster.add(pivot);
+  }
+}
+
+/** A small watermelon: 32 cm, dark stripes on green (vertex colours, low poly). */
+export const watermelon = new Group(); watermelon.name = 'Watermelon';
+{
+  const geometry = new SphereGeometry(.16, 24, 14).toNonIndexed();
+  geometry.scale(1, .92, 1);
+  const pos = geometry.getAttribute('position'), colors: number[] = [];
+  for (let f = 0; f < pos.count; f += 3) {
+    const x = (pos.getX(f) + pos.getX(f + 1) + pos.getX(f + 2)) / 3, z = (pos.getZ(f) + pos.getZ(f + 1) + pos.getZ(f + 2)) / 3;
+    const stripe = Math.sin(Math.atan2(z, x) * 8) > .35;
+    for (let k = 0; k < 3; k++) colors.push(...(stripe ? [.1, .28, .12] : [.33, .58, .26]));
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  const melon = new Mesh(geometry, new MeshStandardMaterial({ vertexColors: true, roughness: .45 })); melon.name = 'Rind'; watermelon.add(melon);
+  const stem = new Mesh(new CylinderGeometry(.006, .01, .03, 6), mat(0x6b5a2a, .8)); stem.name = 'Stem'; stem.position.y = .155; watermelon.add(stem);
+}
+
+/** 月饼, a mooncake: golden-brown drum with a scalloped rim and a pressed top, 13 cm. */
+export const mooncake = new Group(); mooncake.name = 'Mooncake';
+{
+  const crust = mat(0xc4832f, .7), dark = mat(0x9c6020, .7);
+  const body = new Mesh(new CylinderGeometry(.065, .065, .045, 24), crust); body.name = 'Body'; mooncake.add(body);
+  for (let i = 0; i < 12; i++) {
+    const lobe = new Mesh(new SphereGeometry(.014, 8, 6), crust); lobe.name = `Scallop${i}`;
+    const a = i / 12 * Math.PI * 2; lobe.position.set(Math.sin(a) * .064, .012, Math.cos(a) * .064); lobe.scale.set(1, .9, 1);
+    mooncake.add(lobe);
+  }
+  const top = new Mesh(new TorusGeometry(.036, .004, 6, 24).rotateX(Math.PI / 2), dark); top.name = 'PressedRing'; top.position.y = .024; mooncake.add(top);
+  const seal = new Mesh(new CylinderGeometry(.016, .016, .003, 12), dark); seal.name = 'PressedSeal'; seal.position.y = .024; mooncake.add(seal);
+}
+
+/** An egg: 9 cm, slightly pointed, warm white shell. */
+export const egg = new Group(); egg.name = 'Egg';
+{
+  const shell = new Mesh(new SphereGeometry(.045, 18, 12), mat(0xf3e9d8, .55)); shell.name = 'Shell';
+  shell.geometry.translate(0, 0, 0); shell.scale.set(1, 1.3, 1); egg.add(shell);
+}
+
+/** 西红柿, a tomato: 12 cm, glossy red with a green calyx. */
+export const tomato = new Group(); tomato.name = 'Tomato';
+{
+  const fruit = new Mesh(new SphereGeometry(.06, 20, 14), mat(0xd3312a, .3)); fruit.name = 'Fruit'; fruit.scale.set(1, .82, 1); tomato.add(fruit);
+  for (let i = 0; i < 5; i++) {
+    const leaf = new Mesh(new BoxGeometry(.008, .002, .035), mat(0x3d7a2c, .7)); leaf.name = `Sepal${i}`;
+    const a = i / 5 * Math.PI * 2; leaf.position.set(Math.sin(a) * .015, .05, Math.cos(a) * .015); leaf.rotation.y = a;
+    tomato.add(leaf);
+  }
+}
+
+/** 锦旗, a silk pennant: faces +Z, red with a gold rod and fringe, 24 cm. */
+export const pennant = new Group(); pennant.name = 'SilkPennant';
+{
+  const silk = mat(0xb81f2b, .55), gold = mat(0xd4a73a, .3, .85);
+  const banner = new Mesh(new BoxGeometry(.13, .17, .004), silk); banner.name = 'Silk'; pennant.add(banner);
+  const tail = new Mesh(new ConeGeometry(.092, .05, 4).rotateZ(Math.PI).rotateY(Math.PI / 4).scale(1, 1, .04), silk); tail.name = 'SwallowTail'; tail.position.y = -.1; pennant.add(tail);
+  const rod = new Mesh(new CylinderGeometry(.005, .005, .17, 8).rotateZ(Math.PI / 2), gold); rod.name = 'Rod'; rod.position.y = .09; pennant.add(rod);
+  for (const side of [-1, 1]) { const knob = new Mesh(new SphereGeometry(.009, 8, 6), gold); knob.name = `Finial${side}`; knob.position.set(side * .088, .09, 0); pennant.add(knob); }
+  const band = new Mesh(new BoxGeometry(.1, .012, .002), gold); band.name = 'GoldBand'; band.position.set(0, .045, .003); pennant.add(band);
+  const lines = new Mesh(new BoxGeometry(.012, .09, .002), gold); lines.name = 'GoldInscription'; lines.position.set(0, -.015, .003); pennant.add(lines);
+}
+
+/** 金星, a gold star sticker: faces +Z, five points, 9 cm. */
+export const goldStar = new Group(); goldStar.name = 'GoldStar';
+{
+  const points: number[] = [];
+  for (let i = 0; i < 10; i++) { const r = i % 2 ? .019 : .045, a = i / 10 * Math.PI * 2; points.push(Math.sin(a) * r, Math.cos(a) * r); }
+  const positions: number[] = [];
+  for (let i = 0; i < 10; i++) {
+    const j = (i + 1) % 10;
+    // Counter-clockwise seen from +Z, so the face looks outward.
+    positions.push(0, 0, .004, points[j * 2], points[j * 2 + 1], .002, points[i * 2], points[i * 2 + 1], .002);
+  }
+  const geometry = new BufferGeometry(); geometry.setAttribute('position', new Float32BufferAttribute(positions, 3)); geometry.computeVertexNormals();
+  const face = new Mesh(geometry, mat(0xe2b23c, .25, .9)); face.name = 'Face'; goldStar.add(face);
+  const back = new Mesh(new CylinderGeometry(.03, .03, .003, 10).rotateX(Math.PI / 2), mat(0xc79a32, .4, .7)); back.name = 'Backing'; goldStar.add(back);
 }

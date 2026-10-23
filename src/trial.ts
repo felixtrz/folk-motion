@@ -6,10 +6,9 @@ import { ITEMS, type ItemId, type Kind, type LandCue } from './items.js';
 
 export type { Kind };
 const GRAVITY = -9.8;
-const PEARL = 0x2a1a12;
 
 type Prop = {
-  item: ItemId; kind: Kind; object: Object3D; blob: Mesh; landed: boolean;
+  item: ItemId; kind: Kind; object: Object3D; blob: Mesh; landed: boolean; pinnedAt: number;
   phase: 'idle' | 'flight' | 'free' | 'pinned';
   p: Vector3; v: Vector3; spin: Vector3; age: number; flight: number; fade: number;
   p0: Vector3; v0: Vector3; p1: Vector3; v1: Vector3; split: number;
@@ -59,7 +58,7 @@ export class Trial {
       const blob = new Mesh(blobGeometry, new MeshBasicMaterial({ map: blobMap, transparent: true, depthWrite: false, opacity: 0, fog: false }));
       blob.renderOrder = 3; blob.visible = false;
       this.group.add(object, blob);
-      this.props.push({ item: it.id, kind: it.kind, object, blob, landed: false, phase: 'idle', p: new Vector3(), v: new Vector3(), spin: new Vector3(), age: 0, flight: 0, fade: 0, p0: new Vector3(), v0: new Vector3(), p1: new Vector3(), v1: new Vector3(), split: 0, onArrive: null });
+      this.props.push({ item: it.id, kind: it.kind, object, blob, landed: false, pinnedAt: 0, phase: 'idle', p: new Vector3(), v: new Vector3(), spin: new Vector3(), age: 0, flight: 0, fade: 0, p0: new Vector3(), v0: new Vector3(), p1: new Vector3(), v1: new Vector3(), split: 0, onArrive: null });
     }
     // Droplets (water, coffee, milk tea and its pearls): one instanced mesh, recycled ring buffer.
     const N = 240;
@@ -112,7 +111,15 @@ export class Trial {
   }
 
   /** Pins a prop to a bone, keeping its world placement (the flower on the chest). */
-  pin(prop: Prop, bone: Object3D): void { bone.attach(prop.object); prop.phase = 'pinned'; prop.blob.visible = false; }
+  pin(prop: Prop, bone: Object3D): void { bone.attach(prop.object); prop.phase = 'pinned'; prop.pinnedAt = ++this.pins; prop.blob.visible = false; }
+  private pins = 0;
+
+  /** The oldest thing pinned to this bone falls off (his chest has room for six). */
+  dropOldest(bone: Object3D): void {
+    let oldest: Prop | null = null;
+    for (const p of this.props) if (p.phase === 'pinned' && p.object.parent === bone && (!oldest || p.pinnedAt < oldest.pinnedAt)) oldest = p;
+    if (oldest) this.release(oldest, this.t1.set((Math.random() - .5) * .8, .8, .5), this.t2.set(5, 0, 4));
+  }
 
   /** Splashes a prop's contents away from the body, toward `away`. A balloon bursts; a cup
    *  survives and drops to the floor; milk tea throws its pearls too. */
@@ -122,11 +129,12 @@ export class Trial {
     const at = this.s.copy(prop.p);
     if (splash.shell) this.release(prop, this.t2.copy(away).multiplyScalar(.6).setY(.8), this.t1.set(7, 0, 5));
     else { prop.object.visible = false; prop.blob.visible = false; prop.phase = 'idle'; }
-    for (let i = 0; i < 70 + (splash.pearls ? 16 : 0); i++) {
-      const pearl = splash.pearls && i >= 70;
+    const extra = splash.extra;
+    for (let i = 0; i < 70 + (extra?.count ?? 0); i++) {
+      const bit = extra && i >= 70;
       this.t1.set(Math.random() - .5, Math.random() * .9 + .1, Math.random() - .5).normalize().multiplyScalar(1.2 + Math.random() * 2.2);
       this.t1.addScaledVector(away, .8 + Math.random() * 1.4);
-      this.spawnDrop(at, this.t1, pearl ? PEARL : splash.color, pearl ? .75 : 1);
+      this.spawnDrop(at, this.t1, bit ? extra.color : splash.color, bit ? extra.size : 1);
     }
   }
 

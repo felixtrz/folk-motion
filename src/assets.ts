@@ -1,7 +1,8 @@
 import { AssetType, defineAssets } from '@iwsdk/core';
 import { studio } from './scene-assets/studio.scene-asset.js';
 import {
-  beerBottle, bubbleTea, bun, coffeeCup, football, goldMedal, redEnvelope, redFlower, shuttlecock, slipper, sodaCan, waterBalloon,
+  beerBottle, boardEraser, bubbleTea, bun, coffeeCup, egg, featherDuster, football, goldMedal, goldStar, mooncake, pennant, redEnvelope,
+  redFlower, shuttlecock, slipper, sodaCan, tomato, waterBalloon, watermelon,
 } from './scene-assets/props.scene-asset.js';
 export default defineAssets({
   'pose-guide': { url: `${import.meta.env.BASE_URL}characters/instructor.glb`, type: AssetType.GLTF, name: 'Low-poly folk instructor' },
@@ -20,5 +21,13 @@ export default defineAssets({
   'prop-bubble-tea': bubbleTea,
   'prop-gold-medal': goldMedal,
   'prop-red-envelope': redEnvelope,
+  'prop-board-eraser': boardEraser,
+  'prop-feather-duster': featherDuster,
+  'prop-watermelon': watermelon,
+  'prop-mooncake': mooncake,
+  'prop-egg': egg,
+  'prop-tomato': tomato,
+  'prop-pennant': pennant,
+  'prop-gold-star': goldStar,
   'lesson-panel': {url:`${import.meta.env.BASE_URL}ui/lesson.uikitml`,type:AssetType.UIKitML,name:'Lesson controls'},
 });

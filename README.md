@@ -39,10 +39,10 @@ and its observed function becomes literally true:
 
 | Tray slot (cycles after each throw) | Response | Observed function |
 |---|---|---|
-| Soda can → beer bottle → 拖鞋 slipper | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
-| 毽子 → football → 包子 | 浪子踢球, kicks it back up with the raised foot | Kicking a ball that is not there. |
-| Water balloon → coffee → 珍珠奶茶 | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
-| 小红花 → gold medal → 红包 | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
+| Soda can → beer bottle → 拖鞋 slipper → 黑板擦 eraser → 鸡毛掸子 feather duster | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
+| 毽子 → football → 包子 → 西瓜 watermelon → 月饼 mooncake | 浪子踢球, kicks it back up with the raised foot | Kicking a ball that is not there. |
+| Water balloon → coffee → 珍珠奶茶 → 鸡蛋 egg → 西红柿 tomato | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
+| 小红花 → gold medal → 红包 → 锦旗 pennant → 金星 gold star | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
 
 Three clean dodges or returns in a row earn an unprompted gloat. The trial log counts Dodged /
 Returned / Soaked / Flattered. After a dodge he steps back to his mark; every other response

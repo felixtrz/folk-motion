@@ -398,6 +398,9 @@ export class SpecimenViewer extends createSystem({}) {
         break;
       case 'flower':
         this.sfx.play('chime'); this.counts[3]++;
+        if (this.trial.pinnedOn(s.rig.bone(2)) >= PINS.length) this.trial.dropOldest(s.rig.bone(2));
+        // Pinned upright, facing out, at a slightly jaunty angle (whatever its spin in flight).
+        prop.object.rotation.set(0, 0, (Math.random() - .5) * .35);
         this.trial.pin(prop, s.rig.bone(2));
         break;
     }
