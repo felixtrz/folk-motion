@@ -31,11 +31,30 @@ npm run build      # production build in dist/
 npm test           # motion, contact, lesson and coaching tests
 ```
 
-Controls: tap 01–04 or ←/→ for plates, play/pause (Space), speed, **Notes** (N) for the
-specimen card, drag to orbit, swipe left/right to change subject. Deep links: `?specimen=3&avatar=croc&t=3.4&paused=1`
-(`avatar` = `instructor` | `robot` | `croc`).
-The interface is in Chinese for Chinese-language browsers and English otherwise; `?lang=zh` or
-`?lang=en` overrides it.
+## How to play
+
+A field trial. The specimen stands at rest (specimen 0, *Status expectans*); tap a throwable in
+the tray and it is thrown at him from the button you pressed. He responds with a recorded move,
+and its observed function becomes literally true:
+
+| Throw | Response | Observed function |
+|---|---|---|
+| Soda can | 闪身步, ducks aside at the last instant | Evading something no one else can see. |
+| Shuttlecock (毽子) | 浪子踢球, heel-flicks it back | Kicking a ball that is not there. |
+| Water balloon | gets soaked, then 狗熊哆嗦毛 | Drying off without a towel. |
+| Red paper flower (小红花) | pinned to his chest, then 摇头晃脑 | Broadcasting complete satisfaction with oneself. |
+
+Three clean dodges or returns in a row earn an unprompted gloat. The trial log counts Dodged /
+Returned / Soaked / Flattered. Swipe left/right (or the masthead tabs) to change subject; drag to
+orbit; **Notes** opens the specimen card. Keys: 1–4 throw, Space throws at random, ←/→ subject,
+N notes. The interface is in Chinese for Chinese-language browsers and English otherwise;
+`?lang=zh` or `?lang=en` overrides it. `?avatar=instructor|robot|croc` picks the subject, and old
+plate links (`?specimen=3&t=3.4`) still open that plate as recorded.
+
+Each throw is choreographed to its recording: the flight is timed and aimed (from the posed rig)
+so the thing arrives on the clip's key frame. Clips cross-fade and play relative to where he
+stands (`src/specimen-viewer.ts`); the props, splash and pinned flowers live in `src/trial.ts`
+(`src/scene-assets/props.scene-asset.ts` for the models); sound is synthesised (`src/sfx.ts`).
 
 ## How it looks the way it does
 

@@ -23,6 +23,9 @@ export class InstructorRig {
   private readonly rightMarker: Mesh;
   private readonly mint: Material | Material[];
   private readonly peach: Material | Material[];
+  // Pose captured by snapshot(), blended out of by blend() when one clip cuts to another.
+  private readonly heldRotations = RIG.map(() => new Quaternion());
+  private readonly heldRoot = new Vector3();
 
   constructor(root: Object3D) {
     const require = (name: string): Object3D => {
@@ -34,6 +37,25 @@ export class InstructorRig {
     this.leftMarker = require('LeftWristGuide') as Mesh; this.rightMarker = require('RightWristGuide') as Mesh;
     this.mint = this.leftMarker.material; this.peach = this.rightMarker.material;
   }
+
+  /** Bone by rig index (0 = hips, 2 = chest, 4 = head, 13/16 = feet). */
+  bone(index: number): Bone { return this.bones[index]; }
+
+  /** Holds the current pose so the next clip can fade in from it. */
+  snapshot(): void {
+    this.heldRoot.copy(this.bones[0].position);
+    for (let i = 0; i < NB; i++) this.heldRotations[i].copy(this.bones[i].quaternion);
+  }
+
+  /** After apply(): mixes the held pose back in, weight 1 = held pose only, 0 = the new clip. */
+  blend(held: number): void {
+    if (held <= 0) return;
+    this.bones[0].position.lerp(this.heldRoot, held);
+    for (let i = 0; i < NB; i++) this.bones[i].quaternion.slerp(this.heldRotations[i], held);
+  }
+
+  /** Moves the root on the floor plane (clips are played relative to where he stands). */
+  shiftRoot(dx: number, dz: number): void { this.bones[0].position.x += dx; this.bones[0].position.z += dz; }
 
   /**
    * Poses the rig at `time`. With `asRecorded` false the pose is reflected left/right.

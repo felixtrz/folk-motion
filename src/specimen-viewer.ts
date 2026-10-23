@@ -1,6 +1,6 @@
 import {
   CanvasTexture, Color, DirectionalLight, SRGBColorSpace, Fog, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
-  PlaneGeometry, Quaternion, Vector3, Euler, createSystem,
+  Quaternion, Vector3, Euler, createSystem,
 } from '@iwsdk/core';
 import { ContactShadow } from './contact-shadow.js';
 import { Hud } from './hud.js';
@@ -8,39 +8,70 @@ import { InstructorRig } from './instructor-rig.js';
 import { measure, type SpecimenStats } from './motion-stats.js';
 import { MOVES, validateMotion, type Motion } from './motion.js';
 import { SPECIMENS } from './specimens.js';
+import { Sfx } from './sfx.js';
+import { Trial, type Kind, type Prop } from './trial.js';
 
 const PAPER = 0xf7f7f5;   // far floor, horizon and page; the light pool under the subject is brighter
 const STAGE = new Vector3(.7, 0, -2.8);
-const SPEEDS = [1, .5, .25];
-const FOOTPRINTS = 0;   // footprints read as floor debris in review; the contact lanes carry that data
 const AVATARS = ['instructor', 'robot', 'croc'] as const;
+const KINDS: Kind[] = ['can', 'shuttle', 'balloon', 'flower'];
+const BLEND = .28;          // seconds to fade from one recording into another
+const TRIAL_HALF_WIDTH = .82;
+
+// The recordings are fixed, so every throw is choreographed to one: the thing arrives on the
+// clip's key frame. Times are seconds into each motion file (see scripts/motion-clips.json).
+const IDLE = { clip: 0, start: .05, end: .6, speed: .3 };                     // flash step, standing
+const DODGES = [{ key: 2.75, end: 3.65 }, { key: 4.35, end: 5.05 }, { key: 6.0, end: 6.8 }];   // the ducks of the flash step
+const REACT = {
+  can: { clip: 0, key: 0, end: 0, flight: .55 },
+  shuttle: { clip: 1, key: 4.05, end: 4.95, flight: 1.35 },  // rear heel-flick of the left foot
+  balloon: { clip: 2, key: 1.1, end: 4.1, flight: .6 },      // hit just before the bear shakes
+  flower: { clip: 3, key: 1.0, end: 4.4, flight: .6 },       // pinned just before the smug head-shake
+};
+const GLOAT = { clip: 3, start: 1.1, end: 4.4 };
+const CHEST_FRONT = [.12, .145, .175];   // chest-bone origin to shirt front, per subject
+// Flower spots on the chest (x toward his left, y down from the shoulder line): the lapel first,
+// where his smug hands never cover it.
+const PINS = [[.075, -.045], [-.07, -.06], [.02, -.15], [.1, -.17], [-.09, -.18], [-.01, -.03]];
+
+type Play = { clip: number; start: number; end: number; t: number; speed: number; dir: number; loop: 'none' | 'pingpong' | 'wrap'; offX: number; offZ: number };
 
 /**
- * Phone-first field-guide viewer (everything outside a headset session): plays the
- * selected specimen on loop in a white studio, frames it for the screen's aspect,
- * orbits on drag, stamps footprints at observed contacts and drives the HUD.
+ * Phone-first field trial (everything outside a headset session): the specimen stands in a
+ * white studio; the viewer throws things at it and it responds with the recorded moves.
+ * Also frames the specimen for the screen, orbits on drag and drives the HUD.
  */
 export class SpecimenViewer extends createSystem({}) {
   private guide!: Object3D;
-  private subjects: { id: string; object: Object3D; rig: InstructorRig; feet: Object3D[]; hips: Object3D }[] = [];
+  private subjects: { id: string; object: Object3D; rig: InstructorRig; hips: Object3D }[] = [];
   private subject = 0;
   private frame = 0;
   private panel!: Object3D;
   private hud!: Hud;
+  private sfx!: Sfx;
+  private trial!: Trial;
   private motions: Motion[] = [];
   private stats: SpecimenStats[] = [];
   private ready = false;
-  private selected = 0;
-  private time = 0;
-  private playing = true;
-  private speedIndex = 0;
-  private scrubbing = false;
   private presenting = false;
+  private manual = false;             // a plate played as recorded (review captures, old deep links)
+  private cur: Play = { clip: 0, start: IDLE.start, end: IDLE.end, t: IDLE.start, speed: IDLE.speed, dir: 1, loop: 'pingpong', offX: 0, offZ: 0 };
+  private blendLeft = 0;
+  private anchorX = 0;
+  private anchorZ = 0;
+  private busy = false;
+  private streak = 0;
+  private readonly counts = [0, 0, 0, 0];
+  private trials = 0;
+  private breath = 0;
   private readonly points = Array.from({ length: 33 }, () => new Vector3());
   private readonly confidence = new Float32Array(33);
   private readonly target = new Vector3();
   private readonly tmp = new Vector3();
-  private readonly tmpQ = new Quaternion();
+  private readonly aim = new Vector3();
+  private readonly from = new Vector3();
+  private readonly toCamera = new Vector3();
+  private readonly breathQ = new Quaternion();
   private readonly euler = new Euler(0, 0, 0, 'YXZ');
   private azimuth = 0;
   private elevation = .23;
@@ -57,72 +88,68 @@ export class SpecimenViewer extends createSystem({}) {
   private band = [.3, .74];
   private bandDirty = true;
   private bandOverride: number[] | null = null;   // review captures only
-  private prints: Mesh[] = [];
-  private printCanvases: HTMLCanvasElement[] = [];
-  private readonly lastPlant = [new Vector3(), new Vector3()];
-  private printAge = new Float32Array(FOOTPRINTS);
-  private nextPrint = 0;
-  private wasContact = [false, false];
-  private handSpeed = 0;
-  private uiElapsed = 0;
+  private seekRequest: { clip: number; t: number } | null = null;
+  private timeScale = 1;   // review only: slow motion for inspecting contacts
 
   init(): void {
     // Three subjects share one rig and motion; only the selected one is shown and posed.
     this.subjects = (['Instructor', 'Robot', 'Croc'] as const).map((node, i) => {
       const object = this.world.requireSceneObject(node);
-      return { id: AVATARS[i], object, rig: new InstructorRig(object), feet: ['LeftFoot', 'RightFoot'].map(n => object.getObjectByName(n)!), hips: object.getObjectByName('Hips')! };
+      return { id: AVATARS[i], object, rig: new InstructorRig(object), hips: object.getObjectByName('Hips')! };
     });
     this.guide = this.subjects[0].object;
     this.panel = this.world.requireSceneObject('LessonControls');
     this.setupStudio();
     this.readUrl();
+    this.sfx = new Sfx();
+    this.cleanupFuncs.push(() => this.sfx.dispose());
     this.hud = new Hud(SPECIMENS, {
-      select: i => this.select(i),
-      togglePlay: () => { this.playing = !this.playing; this.writeUrl(); },
-      cycleSpeed: () => { this.speedIndex = (this.speedIndex + 1) % SPEEDS.length; },
-      scrub: (fraction, done) => this.scrub(fraction, done),
+      throw: (i, x, y) => this.throwAt(i, x, y),
       subject: i => this.selectSubject(i),
+      sound: on => this.sfx.setEnabled(on),
       enterXR: () => { try { this.world.launchXR(); } catch { /* Unsupported: the button stays harmless. */ } },
-    });
+    }, this.sfx.enabled);
     this.cleanupFuncs.push(() => this.hud.dispose());
     void navigator.xr?.isSessionSupported('immersive-vr').then(ok => this.hud.setXRAvailable(ok)).catch(() => undefined);
     this.bindInput();
     const resize = () => { this.bandDirty = true; };
     window.addEventListener('resize', resize);
     this.cleanupFuncs.push(() => window.removeEventListener('resize', resize));
-    // Review hook for deterministic captures (scripts/phone-shots.mjs); off unless ?review=1.
-    if (new URLSearchParams(location.search).get('review') === '1') {
-      (window as unknown as { __review: object }).__review = {
-        seek: (specimen: number, t: number, az?: number, el?: number) => {
-          this.playing = true; this.select(specimen - 1, t); this.playing = false; this.clearPrints();
-          if (az !== undefined) { this.azimuth = az * Math.PI / 180; this.idle = -1e9; }
-          if (el !== undefined) this.elevation = el * Math.PI / 180;
-        },
-        play: (t: number) => { this.time = t; },
-        // Capture hooks: move time and camera without re-selecting the plate, switch subject,
-        // and override the vertical band the figure is fitted into (null restores the HUD's).
-        frame: (t: number, az: number, el?: number) => {
-          // Shown as playing, but time only moves when the capture says so.
-          this.playing = true; this.scrubbing = true;
-          this.time = t; this.azimuth = az * Math.PI / 180; this.idle = -1e9;
-          if (el !== undefined) this.elevation = el * Math.PI / 180;
-        },
-        subject: (i: number) => this.selectSubject(i),
-        band: (band: number[] | null) => { this.bandOverride = band; this.bandDirty = true; },
-        camera: () => { const c = this.world.camera as PerspectiveCamera; return { band: this.band, aspect: c.aspect, fov: c.fov, target: this.target.toArray(), player: this.world.player.position.toArray(), top: this.tops[this.selected], span: this.extents[this.selected] }; },
-        shadows: () => [this.shadow.probe(this.world.renderer), this.contact.probe(this.world.renderer)],
-        light: () => {
-          const out: number[][] = [];
-          this.world.requireSceneObject('KeyLight').traverse(o => {
-            const l = o as DirectionalLight;
-            if (l.isDirectionalLight) out.push(l.getWorldPosition(new Vector3()).toArray(), l.target.getWorldPosition(new Vector3()).toArray(), [l.target.parent ? 1 : 0]);
-          });
-          return out;
-        },
-      };
-    }
+    if (new URLSearchParams(location.search).get('review') === '1') this.exposeReview();
     this.selectSubject(this.subject);
     void this.load();
+  }
+
+  /** Deterministic capture hooks (scripts/*-shots.mjs, scripts/promo); only with ?review=1. */
+  private exposeReview(): void {
+    (window as unknown as { __review: object }).__review = {
+      // Plays plate `specimen` as recorded, held at time t.
+      seek: (specimen: number, t: number, az?: number, el?: number) => {
+        this.showPlate(specimen - 1, t);
+        if (az !== undefined) { this.azimuth = az * Math.PI / 180; this.idle = -1e9; }
+        if (el !== undefined) this.elevation = el * Math.PI / 180;
+      },
+      play: (t: number) => { this.cur.t = t; },
+      frame: (t: number, az: number, el?: number) => {
+        this.cur.t = t; this.azimuth = az * Math.PI / 180; this.idle = -1e9;
+        if (el !== undefined) this.elevation = el * Math.PI / 180;
+      },
+      throw: (i: number) => this.throwAt(i, innerWidth / 2, innerHeight * .88),
+      timeScale: (k: number) => { this.timeScale = k; },
+      state: () => ({ busy: this.busy, clip: this.cur.clip, t: this.cur.t, counts: [...this.counts], anchor: [this.anchorX, this.anchorZ], manual: this.manual }),
+      subject: (i: number) => this.selectSubject(i),
+      band: (band: number[] | null) => { this.bandOverride = band; this.bandDirty = true; },
+      camera: () => { const c = this.world.camera as PerspectiveCamera; return { band: this.band, aspect: c.aspect, fov: c.fov, target: this.target.toArray(), player: this.world.player.position.toArray(), top: this.tops[this.cur.clip], span: this.halfWidth() }; },
+      shadows: () => [this.shadow.probe(this.world.renderer), this.contact.probe(this.world.renderer)],
+      light: () => {
+        const out: number[][] = [];
+        this.world.requireSceneObject('KeyLight').traverse(o => {
+          const l = o as DirectionalLight;
+          if (l.isDirectionalLight) out.push(l.getWorldPosition(new Vector3()).toArray(), l.target.getWorldPosition(new Vector3()).toArray(), [l.target.parent ? 1 : 0]);
+        });
+        return out;
+      },
+    };
   }
 
   private setupStudio(): void {
@@ -142,17 +169,13 @@ export class SpecimenViewer extends createSystem({}) {
     this.contact.plane.renderOrder = 2;
     group.add(this.shadow.plane, this.contact.plane);
     this.cleanupFuncs.push(() => { this.shadow.dispose(); this.contact.dispose(); });
-    // Gait trace: a printed sole and a label (L1, R2, ...) where each contact began.
-    const printGeometry = new PlaneGeometry(.36, .36).rotateX(-Math.PI / 2);
-    for (let i = 0; i < FOOTPRINTS; i++) {
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
-      const texture = new CanvasTexture(canvas); texture.anisotropy = 8;
-      const m = new Mesh(printGeometry, new MeshBasicMaterial({ map: texture, transparent: true, opacity: 0, depthWrite: false, fog: false }));
-      m.name = `Footprint${i}`; m.renderOrder = 3; m.visible = false; group.add(m); this.prints.push(m); this.printCanvases.push(canvas);
-    }
+    this.trial = new Trial();
+    this.trial.onLand = kind => this.sfx.play(kind === 'can' ? 'clank' : 'kick');
+    group.add(this.trial.group);
+    this.cleanupFuncs.push(() => this.trial.dispose());
     this.world.requireSceneObject('PracticeStage').getObjectByName('ShadowCatcher')!.visible = false;
-    // The floor draws first and writes no depth, so the shadow and footprint overlays lying
-    // on it can never z-fight with it (they would at a grazing angle, as radial streaks).
+    // The floor draws first and writes no depth, so the shadow overlays lying on it can never
+    // z-fight with it (they would at a grazing angle, as radial streaks).
     const floor = this.world.requireSceneObject('PracticeStage').getObjectByName('StudioFloor') as Mesh;
     (floor.material as MeshBasicMaterial).depthWrite = false;
     floor.renderOrder = -1;
@@ -186,36 +209,56 @@ export class SpecimenViewer extends createSystem({}) {
         }
         return reach + .08;
       });
-      // Highest point over the clip (raised hands, or the head plus the tallest headgear).
-      this.tops = this.motions.map((m, i) => {
-        let top = 1.8;
+      // One specimen box for every plate (like specimens drawn to a common scale): the
+      // typical tallest reach; rare overhead extremes may use the band's margin.
+      let top = 1.8;
+      this.motions.forEach((m, i) => {
         for (let f = Math.floor(MOVES[i].watchStart * m.fps); f < Math.min(m.frameCount, MOVES[i].watchEnd * m.fps); f++) {
           top = Math.max(top, m.joints[f * 9 + 1] + .2, m.joints[f * 9 + 4] + .1, m.joints[f * 9 + 7] + .1);
         }
-        return top;
       });
-      // One specimen box for every plate (like specimens drawn to a common scale): the tallest
-      // reach and widest span over all clips, so the figure's scale never drifts between plates.
-      // Common height for every plate; only a clip whose arms fly wider steps back.
-      // Fit the typical tallest pose; rare overhead extremes may use the band's margin.
-      const top = Math.min(2.08, Math.max(...this.tops));
-      this.tops = this.tops.map(() => top);
+      this.tops = this.motions.map(() => Math.min(2.08, top));
       this.ready = true;
-      this.select(this.selected, this.time);
+      this.hud.showNotes(0, this.stats[0]);
+      if (this.seekRequest) this.showPlate(this.seekRequest.clip, this.seekRequest.t);
+      else { this.hud.showBehaviour(null); this.startIdle(false); }
+      this.hud.setLog(this.counts, this.trials);
     } catch (error) {
       console.warn('Specimen motion unavailable', error);
     }
   }
 
-  private select(index: number, time?: number): void {
-    if (!this.ready) { this.selected = index; return; }
-    this.selected = (index + MOVES.length) % MOVES.length;
-    const move = MOVES[this.selected];
-    this.time = time !== undefined && time >= move.watchStart && time <= move.watchEnd ? time : move.watchStart;
-    this.clearPrints();
+  /** Root position of a clip at time t (x, z on the floor). */
+  private rootAt(clip: number, t: number, axis: 0 | 2): number {
+    const m = this.motions[clip], f = Math.max(0, Math.min(m.frameCount - 1, t * m.fps));
+    const a = Math.floor(f), b = Math.min(a + 1, m.frameCount - 1);
+    return m.root[a * 3 + axis] + (m.root[b * 3 + axis] - m.root[a * 3 + axis]) * (f - a);
+  }
+
+  /** Cuts to a window of a recording, fading in from the current pose, played where he stands. */
+  private startClip(clip: number, start: number, end: number, loop: Play['loop'], speed: number, fade = true): void {
+    if (fade) { this.subjects[this.subject].rig.snapshot(); this.blendLeft = BLEND; } else this.blendLeft = 0;
+    const offX = this.manual ? 0 : this.anchorX - this.rootAt(clip, start, 0);
+    const offZ = this.manual ? 0 : this.anchorZ - this.rootAt(clip, start, 2);
+    this.cur = { clip, start, end, t: start, speed, dir: 1, loop, offX, offZ };
+  }
+
+  private startIdle(fade = true): void {
+    this.startClip(IDLE.clip, IDLE.start, IDLE.end, 'pingpong', IDLE.speed, fade);
+    this.busy = false;
+    this.hud?.setBusy(false);
+  }
+
+  /** A plate played as recorded, held at time t (review captures and old deep links). */
+  private showPlate(index: number, t: number): void {
+    if (!this.ready) { this.seekRequest = { clip: index, t }; return; }
+    this.manual = true;
+    const clip = (index + MOVES.length) % MOVES.length, move = MOVES[clip];
+    this.anchorX = this.anchorZ = 0;
+    this.startClip(clip, move.watchStart, move.watchEnd, 'wrap', 0, false);
+    this.cur.t = t;
     this.bandDirty = true;
-    this.hud.showSpecimen(this.selected, this.stats[this.selected], this.motions[this.selected].contacts ?? [], move.watchStart, move.watchEnd);
-    this.writeUrl();
+    this.hud.showBehaviour(clip, this.stats[clip]);
   }
 
   private selectSubject(index: number): void {
@@ -223,18 +266,116 @@ export class SpecimenViewer extends createSystem({}) {
     this.guide.visible = false;
     this.guide = this.subjects[this.subject].object;
     this.guide.visible = true;
+    this.blendLeft = 0;   // the held pose belonged to the previous subject's rig
     this.shadow.setSubject(this.guide); this.contact.setSubject(this.guide);
     this.hud.showSubject(this.subject);
     this.writeUrl();
   }
 
-  private scrub(fraction: number, done: boolean): void {
-    if (!this.ready) return;
-    const move = MOVES[this.selected];
-    this.scrubbing = !done;
-    this.time = move.watchStart + fraction * (move.watchEnd - move.watchStart);
-    this.clearPrints();
-    if (done) this.writeUrl();
+  /** World point on the line of sight through a screen pixel, `distance` metres from the camera. */
+  private screenToWorld(x: number, y: number, distance: number, out: Vector3): Vector3 {
+    const camera = this.world.camera as PerspectiveCamera;
+    camera.getWorldPosition(this.tmp);
+    out.set(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1, .5).unproject(camera).sub(this.tmp).normalize();
+    return out.multiplyScalar(distance).add(this.tmp);
+  }
+
+  /** Bone world position at clip time t (poses the rig; the next frame re-poses it). */
+  private probe(t: number, bone: number, local: Vector3, out: Vector3): Vector3 {
+    const s = this.subjects[this.subject];
+    s.rig.apply(this.motions[this.cur.clip], t, true, this.points, this.confidence);
+    s.rig.shiftRoot(this.cur.offX, this.cur.offZ);
+    this.guide.updateMatrixWorld(true);
+    return s.rig.bone(bone).localToWorld(out.copy(local));
+  }
+
+  /** Throws thing `index` from screen point (x, y): the specimen responds on the key frame. */
+  private throwAt(index: number, x: number, y: number): void {
+    if (!this.ready || this.presenting || this.busy) return;
+    const kind = KINDS[index];
+    if (!kind || !this.trial.available(kind)) return;
+    if (this.manual) { this.manual = false; this.anchorX = this.anchorZ = 0; this.bandDirty = true; }
+    this.sfx.wake(); this.sfx.play('throw');
+    navigator.vibrate?.(8);
+    this.busy = true; this.hud.setBusy(true);
+    this.trials++;
+    const s = this.subjects[this.subject], depth = CHEST_FRONT[this.subject];
+    this.screenToWorld(x, y, 1.4, this.from);
+    let clip: number, key: number, end: number, flight: number;
+    if (kind === 'can') {
+      // Aimed at where his chest is now; he is somewhere else when it gets there. Prefer the
+      // flash that carries him back toward the middle of the floor.
+      flight = REACT.can.flight;
+      const toward = DODGES.filter(d => {
+        const shift = this.rootAt(0, d.end, 0) - this.rootAt(0, d.key - flight, 0);
+        return Math.abs(this.anchorX) < .12 || Math.sign(shift) === -Math.sign(this.anchorX);
+      });
+      const pick = toward[Math.floor(Math.random() * toward.length)] ?? DODGES[0];
+      clip = 0; key = pick.key; end = pick.end;
+      // At his head as he stands now, nudged against the way he will lean: it visibly
+      // passes just beside his ear at the bottom of the duck.
+      const lean = Math.sign(this.rootAt(0, pick.end, 0) - this.rootAt(0, pick.key - flight, 0));
+      s.rig.bone(4).localToWorld(this.aim.set(0, .02, .02)).x -= lean * .1;
+    } else {
+      ({ clip, key, end, flight } = REACT[kind]);
+    }
+    this.startClip(clip, key - flight, end, 'none', 1);
+    if (kind === 'shuttle') this.probe(key, 13, this.tmp.set(0, -.09, -.07), this.aim);   // under the left heel
+    else if (kind === 'balloon') this.probe(key, 2, this.tmp.set(0, -.12, depth), this.aim);
+    else if (kind === 'flower') {
+      const [px, py] = PINS[this.trial.pinnedOn(s.rig.bone(2)) % PINS.length];
+      this.probe(key, 2, this.tmp.set(px, py, depth + .01), this.aim);
+    }
+    // The shuttlecock goes up out of frame and drops onto the heel behind him, as a real
+    // 毽子 does; a direct lob would have to pass through him.
+    const via = kind === 'shuttle' ? this.toCamera.copy(this.aim).setY(this.aim.y + 2.9) : undefined;
+    this.trial.launch(kind, this.from, this.aim, flight, prop => this.arrive(kind, prop), via, .55);
+    this.hud.setActive(index);
+    this.hud.showBehaviour(clip, this.stats[clip]);
+  }
+
+  private arrive(kind: Kind, prop: Prop): void {
+    const s = this.subjects[this.subject];
+    (this.world.camera as PerspectiveCamera).getWorldPosition(this.toCamera);
+    this.toCamera.sub(prop.p).setY(0).normalize();
+    switch (kind) {
+      case 'can':
+        this.sfx.play('swoosh'); this.counts[0]++; this.streak++;
+        break;
+      case 'shuttle':
+        // Flicked back over his head toward the viewer.
+        this.sfx.play('kick'); this.counts[1]++; this.streak++;
+        this.trial.release(prop, this.tmp.copy(this.toCamera).multiplyScalar(.85).setY(4).add(this.aim.set((Math.random() - .5) * .5, 0, 0)));
+        navigator.vibrate?.(12);
+        break;
+      case 'balloon':
+        this.sfx.play('splash'); this.counts[2]++; this.streak = 0;
+        this.trial.burst(prop, this.toCamera);
+        this.trial.dropPinned();
+        this.trial.shake([s.rig.bone(4), s.rig.bone(7), s.rig.bone(10), s.rig.bone(2)], 2.6);
+        navigator.vibrate?.([10, 30, 10]);
+        break;
+      case 'flower':
+        this.sfx.play('chime'); this.counts[3]++;
+        this.trial.pin(prop, s.rig.bone(2));
+        break;
+    }
+    this.hud.setLog(this.counts, this.trials, KINDS.indexOf(kind));
+  }
+
+  /** A reaction finished: three clean dodges or returns in a row earn a gloat. */
+  private clipEnded(): void {
+    const p = this.cur;
+    this.anchorX = Math.max(-.45, Math.min(.45, p.offX + this.rootAt(p.clip, p.end, 0)));
+    this.anchorZ = Math.max(-.25, Math.min(.25, p.offZ + this.rootAt(p.clip, p.end, 2)));
+    if (this.streak >= 3 && !(p.clip === GLOAT.clip && p.start === GLOAT.start)) {
+      this.streak = 0;
+      this.startClip(GLOAT.clip, GLOAT.start, GLOAT.end, 'none', 1);
+      this.hud.showBehaviour(GLOAT.clip, this.stats[GLOAT.clip]);
+      this.sfx.play('chime');
+      return;
+    }
+    this.startIdle();
   }
 
   private bindInput(): void {
@@ -271,10 +412,10 @@ export class SpecimenViewer extends createSystem({}) {
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
     const key = (e: KeyboardEvent) => {
       if (this.presenting || e.altKey || e.ctrlKey || e.metaKey || e.repeat) return;
-      if (e.code === 'ArrowRight') this.select(this.selected + 1);
-      else if (e.code === 'ArrowLeft') this.select(this.selected - 1);
-      else if (e.code === 'Space') { this.playing = !this.playing; this.writeUrl(); }
-      else if (/^Digit[1-4]$/.test(e.code)) this.select(Number(e.code.slice(-1)) - 1);
+      if (/^Digit[1-4]$/.test(e.code)) this.throwAt(Number(e.code.slice(-1)) - 1, innerWidth / 2, innerHeight * .88);
+      else if (e.code === 'Space') this.throwAt(Math.floor(Math.random() * 4), innerWidth / 2, innerHeight * .88);
+      else if (e.code === 'ArrowRight') this.selectSubject(this.subject + 1);
+      else if (e.code === 'ArrowLeft') this.selectSubject(this.subject - 1);
       else if (e.code === 'KeyN') this.hud.setNotes(!this.hud.open);
       else if (e.code === 'Escape') this.hud.setNotes(false);
       else return;
@@ -290,11 +431,9 @@ export class SpecimenViewer extends createSystem({}) {
 
   private readUrl(): void {
     const q = new URLSearchParams(location.search);
-    const s = Number(q.get('specimen'));
-    if (s >= 1 && s <= MOVES.length) this.selected = s - 1;
-    const t = Number(q.get('t'));
-    if (q.has('t') && Number.isFinite(t)) this.time = t;
-    if (q.get('paused') === '1') this.playing = false;
+    // Old plate links (?specimen=N&t=...&paused=1) still open that plate as recorded.
+    const s = Number(q.get('specimen')), t = Number(q.get('t'));
+    if (s >= 1 && s <= MOVES.length && q.has('t') && Number.isFinite(t)) this.seekRequest = { clip: s - 1, t };
     const avatar = AVATARS.indexOf((q.get('avatar') ?? '') as typeof AVATARS[number]);
     if (avatar >= 0) this.subject = avatar;
     const az = Number(q.get('az'));
@@ -302,38 +441,17 @@ export class SpecimenViewer extends createSystem({}) {
   }
   private writeUrl(): void {
     const q = new URLSearchParams(location.search);
-    q.set('specimen', String(this.selected + 1));
     if (this.subject) q.set('avatar', AVATARS[this.subject]); else q.delete('avatar');
-    if (this.playing) { q.delete('paused'); q.delete('t'); } else { q.set('paused', '1'); q.set('t', this.time.toFixed(2)); }
-    history.replaceState(null, '', `${location.pathname}?${q}`);
-  }
-
-  /** Crisp gait-lab mark: a clean sole outline, toe toward -v. Contacts are labelled in the HUD lanes. */
-  private drawPrint(canvas: HTMLCanvasElement): void {
-    const g = canvas.getContext('2d')!, k = canvas.width / 256, cx = 128 * k, toe = 46 * k, heel = 168 * k;
-    g.clearRect(0, 0, canvas.width, canvas.height);
-    g.beginPath();
-    g.moveTo(cx, toe);
-    g.bezierCurveTo(cx + 26 * k, toe, cx + 30 * k, toe + 46 * k, cx + 22 * k, toe + 70 * k);
-    g.bezierCurveTo(cx + 15 * k, toe + 90 * k, cx + 20 * k, heel - 12 * k, cx, heel);
-    g.bezierCurveTo(cx - 20 * k, heel - 12 * k, cx - 17 * k, toe + 90 * k, cx - 22 * k, toe + 70 * k);
-    g.bezierCurveTo(cx - 30 * k, toe + 46 * k, cx - 26 * k, toe, cx, toe);
-    g.filter = `blur(${3 * k}px)`;
-    g.fillStyle = 'rgba(20,20,19,0.22)'; g.fill();
-    g.filter = 'none';
-  }
-
-  private clearPrints(): void {
-    for (const p of this.prints) { p.visible = false; }
-    this.printAge.fill(0);
-    this.wasContact[0] = this.wasContact[1] = false;
+    history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}`);
   }
 
   update(delta: number): void {
+    delta *= this.timeScale;
     const presenting = this.world.renderer.xr.isPresenting;
     if (presenting !== this.presenting) {
       this.presenting = presenting;
       this.hud.setVisible(!presenting);
+      this.trial.group.visible = !presenting;
       if (presenting) {
         this.world.player.position.set(0, 0, 0); this.world.camera.quaternion.identity();
         const camera = this.world.camera as PerspectiveCamera; camera.near = .001; camera.updateProjectionMatrix();
@@ -352,72 +470,57 @@ export class SpecimenViewer extends createSystem({}) {
       if (s.object !== this.guide) s.object.visible = false;
     }
     if (!this.ready) { this.guide.visible = false; return; }
-    const move = MOVES[this.selected], motion = this.motions[this.selected];
-    if (this.playing && !this.scrubbing) {
-      this.time += delta * SPEEDS[this.speedIndex];
-      if (this.time > move.watchEnd) { this.time = move.watchStart; this.clearPrints(); }
-    }
+    this.advance(delta);
+    const s = this.subjects[this.subject], motion = this.motions[this.cur.clip];
     this.guide.visible = true;
-    this.subjects[this.subject].rig.apply(motion, this.time, true, this.points, this.confidence);
+    s.rig.apply(motion, this.cur.t, true, this.points, this.confidence);
+    s.rig.shiftRoot(this.cur.offX, this.cur.offZ);
+    if (this.blendLeft > 0) {
+      const k = this.blendLeft / BLEND;
+      s.rig.blend(k * k * (3 - 2 * k));
+      this.blendLeft -= delta;
+    }
+    // At rest he breathes: a slow chest rise and a little weight shift, so he never freezes.
+    if (!this.manual && this.cur.loop === 'pingpong') {
+      this.breath += delta;
+      this.breathQ.setFromEuler(this.euler.set(Math.sin(this.breath * 1.6) * .014, Math.sin(this.breath * .55) * .03, Math.sin(this.breath * .8) * .008));
+      s.rig.bone(2).quaternion.multiply(this.breathQ);
+    }
     this.guide.updateMatrixWorld(true);
-    this.updateMarks(motion, delta);
-    this.updateCamera(motion, delta);
-    this.uiElapsed += delta;
-    if (this.uiElapsed > 1 / 20) {
-      this.uiElapsed = 0;
-      const f = Math.min(motion.frameCount - 2, Math.floor(this.time * motion.fps));
-      let speed = 0;
-      for (let w = 1; w <= 2; w++) {
-        const o = f * 9 + w * 3;
-        speed = Math.max(speed, Math.hypot(motion.joints[o + 9] - motion.joints[o], motion.joints[o + 10] - motion.joints[o + 1], motion.joints[o + 11] - motion.joints[o + 2]) * motion.fps);
-      }
-      this.handSpeed = this.playing ? this.handSpeed + (speed - this.handSpeed) * .35 : speed;
-      this.hud.tick((this.time - move.watchStart) / (move.watchEnd - move.watchStart), this.time - move.watchStart,
-        motion.root[f * 3 + 1], this.handSpeed, this.wasContact[0], this.wasContact[1], this.playing, SPEEDS[this.speedIndex]);
+    this.trial.update(delta);
+    this.updateMarks();
+    this.updateCamera(delta);
+  }
+
+  private advance(delta: number): void {
+    const p = this.cur;
+    if (p.speed === 0) return;
+    p.t += delta * p.speed * p.dir;
+    if (p.loop === 'pingpong') {
+      if (p.t > p.end) { p.t = 2 * p.end - p.t; p.dir = -1; }
+      if (p.t < p.start) { p.t = 2 * p.start - p.t; p.dir = 1; }
+    } else if (p.loop === 'wrap') {
+      if (p.t > p.end) p.t = p.start;
+    } else if (p.t >= p.end) {
+      p.t = p.end;
+      this.clipEnded();
     }
   }
 
   private setMarks(visible: boolean): void {
     this.shadow.plane.visible = visible; this.contact.plane.visible = visible;
-    for (const p of this.prints) if (!visible) p.visible = false;
   }
 
-  private updateMarks(motion: Motion, delta: number): void {
-    const contacts = motion.contacts ?? [];
-    for (let i = 0; i < 2; i++) {
-      const foot = this.subjects[this.subject].feet[i];
-      foot.getWorldPosition(this.tmp);
-      foot.getWorldQuaternion(this.tmpQ); this.euler.setFromQuaternion(this.tmpQ);
-      // The readout must agree with what the viewer sees: a foot resting on the floor reads as
-      // planted (sole within 1.5 cm of it), whether or not the solver locked that contact.
-      let inContact = this.tmp.y - .105 < .015;
-      const side = i === 0 ? 'left' : 'right';
-      for (const c of contacts) if (c.foot === side && this.time >= c.start && this.time < c.end) { inContact = true; break; }
-      if (inContact) { this.lastPlant[i].set(this.tmp.x, this.euler.y, this.tmp.z); }
-      // The print is left behind when the foot lifts, so it never sits under a planted shoe.
-      if (!inContact && this.wasContact[i] && this.prints.length) {
-        const p = this.prints[this.nextPrint];
-        this.drawPrint(this.printCanvases[this.nextPrint]);
-        ((p.material as MeshBasicMaterial).map as CanvasTexture).needsUpdate = true;
-        p.position.set(this.lastPlant[i].x, .002, this.lastPlant[i].z); p.rotation.y = this.lastPlant[i].y;
-        p.visible = true; this.printAge[this.nextPrint] = 0;
-        this.nextPrint = (this.nextPrint + 1) % FOOTPRINTS;
-      }
-      this.wasContact[i] = inContact;
-    }
-    for (let i = 0; i < FOOTPRINTS; i++) {
-      const p = this.prints[i];
-      if (!p.visible) continue;
-      if (this.playing) this.printAge[i] += delta;
-      (p.material as MeshBasicMaterial).opacity = Math.max(0, 1 - this.printAge[i] / 4.5);
-      if (this.printAge[i] > 4.5) p.visible = false;
-    }
+  private updateMarks(): void {
     this.subjects[this.subject].hips.getWorldPosition(this.tmp);
     this.shadow.plane.visible = this.contact.plane.visible = true;
     // The wide ambient layer is heavily blurred, so refreshing it every other frame is invisible.
-    if ((this.frame++ & 1) === 0 || !this.playing) this.shadow.update(this.world.renderer, this.tmp.x, this.tmp.z);
+    if ((this.frame++ & 1) === 0 || this.cur.speed === 0) this.shadow.update(this.world.renderer, this.tmp.x, this.tmp.z);
     this.contact.update(this.world.renderer, this.tmp.x, this.tmp.z);
   }
+
+  /** Half-width kept in view: a plate's own reach, or room for any dodge during trials. */
+  private halfWidth(): number { return this.manual ? (this.extents[this.cur.clip] ?? 1) : TRIAL_HALF_WIDTH; }
 
   /** Share of the screen width taken by the desktop text column (0 on phones). */
   private columnFraction(): number {
@@ -427,7 +530,7 @@ export class SpecimenViewer extends createSystem({}) {
   /** Fraction of the half-width left for the specimen beside the text column. */
   private fieldFraction(aspect: number): number { return aspect < .9 ? 1 : (1 - this.columnFraction()) * .72; }
 
-  private updateCamera(motion: Motion, delta: number): void {
+  private updateCamera(delta: number): void {
     const camera = this.world.camera as PerspectiveCamera;
     const aspect = camera.aspect || 1, portrait = aspect < .9;
     // Fit the dancer into the band the HUD leaves free.
@@ -437,10 +540,9 @@ export class SpecimenViewer extends createSystem({}) {
     // Fit floor..clip top into the band the HUD actually leaves free (measured, so it holds on
     // every screen size), centred in it, and wide enough for the clip's widest reach.
     if (this.bandDirty && this.bandOverride) { this.band = this.bandOverride; this.bandDirty = false; }
-    if (this.bandDirty) { if (portrait) this.band = this.hud.freeBand(); else { this.hud.freeBand(); this.band = [.27, .8]; } this.bandDirty = false; }
-    const [a, b] = this.band, top = this.tops[this.selected] ?? 2;
-    const halfWidth = this.extents[this.selected] ?? 1;
-    const height = Math.max(top / Math.max(.2, b - a), 2 * halfWidth / (aspect * (portrait ? .94 : this.fieldFraction(aspect))));
+    if (this.bandDirty) { if (portrait) this.band = this.hud.freeBand(); else { this.hud.freeBand(); this.band = [.14, .9]; } this.bandDirty = false; }
+    const [a, b] = this.band, top = this.tops[this.cur.clip] ?? 2;
+    const height = Math.max(top / Math.max(.2, b - a), 2 * this.halfWidth() / (aspect * (portrait ? .94 : this.fieldFraction(aspect))));
     const distance = height / 2 / Math.tan(fov * Math.PI / 360);
     const targetY = top / 2 - (.5 - (a + b) / 2) * height;
     // After a few idle seconds the specimen eases back to the front view.
@@ -456,8 +558,9 @@ export class SpecimenViewer extends createSystem({}) {
     this.azimuthVelocity *= Math.pow(.02, delta);
     if (Math.abs(this.azimuthVelocity) < .01) this.azimuthVelocity = 0;
     this.idle += delta;
-    const f = Math.min(motion.frameCount - 1, Math.floor(this.time * motion.fps));
-    this.follow += (motion.root[f * 3] * .55 - this.follow) * Math.min(1, delta * 2.5);
+    // Follow the specimen's hips loosely, so dodges read as movement against the room.
+    this.subjects[this.subject].hips.getWorldPosition(this.tmp);
+    this.follow += ((this.tmp.x - STAGE.x) * .55 - this.follow) * Math.min(1, delta * 2.5);
     this.target.set(STAGE.x + this.follow, targetY, STAGE.z);
     // Move the whole player rig, not just the camera: its controller/pointer visuals live
     // at the rig origin and would otherwise sit in front of a camera pulled back from it.

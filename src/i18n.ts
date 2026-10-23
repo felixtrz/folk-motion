@@ -21,6 +21,10 @@ const STRINGS = {
     rows: ['Classification', 'Tradition', 'Genre', 'Observed subject', 'Observed function', 'Duration', 'Foot contacts', 'Lateral excursion', 'Pelvis height', 'Peak hand speed', 'Hand oscillation', 'Head yaw range'],
     method: 'Method. Reconstructed from a single 720p teaching video by monocular pose estimation. Depth is estimated, feet are pinned to observed contacts, and legs in close-up shots are inferred. Source: ',
     imprint: 'Published by', studio: 'EliXR Games — more experiments',
+    trial: 'Trial', protocol: 'Protocol', idleZh: '待机', idleBinomial: 'Status expectans', idleCommon: 'At rest', idleClass: 'Baseline posture',
+    idleFunction: 'Throw something. Record the response.',
+    items: [['Soda', 'Throw a soda can'], ['Shuttle', 'Throw a shuttlecock (jianzi)'], ['Balloon', 'Throw a water balloon'], ['Flower', 'Award a red paper flower']],
+    log: ['Dodged', 'Returned', 'Soaked', 'Flattered'], sound: 'Sound',
     caution: 'Not a substitute for an instructor. Do not attempt the bear near furniture.',
   },
   zh: {
@@ -32,6 +36,10 @@ const STRINGS = {
     rows: ['分类', '流派', '类别', '观察对象', '观察到的功能', '时长', '着地次数', '横向位移', '骨盆高度', '手部峰值速度', '手部摆动频率', '头部转动范围'],
     method: '方法：基于一段 720p 教学视频，用单目姿态估计重建。深度为估计值，双脚固定在观察到的着地点上，特写镜头中的腿部为推断。来源：',
     imprint: '出品', studio: 'EliXR Games — 更多实验',
+    trial: '试验', protocol: '实验步骤', idleZh: '待机', idleBinomial: 'Status expectans', idleCommon: '静息状态', idleClass: '基线姿态',
+    idleFunction: '扔点什么，记录反应。',
+    items: [['可乐罐', '扔一个可乐罐'], ['毽子', '扔一个毽子'], ['水气球', '扔一个水气球'], ['小红花', '奖励一朵小红花']],
+    log: ['闪避', '踢回', '湿透', '得意'], sound: '声音',
     caution: '不能替代老师。请勿在家具附近尝试狗熊。',
   },
 } as const;
