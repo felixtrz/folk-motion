@@ -26,7 +26,8 @@ const IDLE = { clip: 0, start: .05, end: .6, speed: .3 };                     //
 const DODGES = [{ key: 2.75, end: 3.65 }, { key: 4.35, end: 5.05 }, { key: 6.0, end: 6.8 }];   // the ducks of the flash step
 const REACT = {
   can: { clip: 0, key: 0, end: 0, flight: .55 },
-  shuttle: { clip: 1, key: 2.87, end: 3.85, flight: .9 },    // the raised right foot swings forward
+  // From 1.57 s, so his right leg's kick-up (1.9 s) plays in full before it swings forward to meet it.
+  shuttle: { clip: 1, key: 2.87, end: 3.85, flight: 1.3 },
   balloon: { clip: 2, key: 1.1, end: 4.1, flight: .6 },      // hit just before the bear shakes
   flower: { clip: 3, key: 1.0, end: 4.4, flight: .6 },       // pinned just before the smug head-shake
 };
