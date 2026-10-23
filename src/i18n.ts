@@ -2,9 +2,14 @@
  *  `?lang=zh` or `?lang=en` overrides the browser. */
 export type Lang = 'zh' | 'en';
 
+/** Opened inside a Chinese social app's own browser (Xiaohongshu, WeChat, Weibo, Douyin, QQ),
+ *  where the system share sheet and downloads are unavailable but long-press saving works. */
+export const IN_APP = /xhsdiscover|xiaohongshu|MicroMessenger|Weibo|aweme|BytedanceWebview|\bQQ\//i.test(navigator.userAgent);
+
 function detect(): Lang {
   const forced = new URLSearchParams(location.search).get('lang');
   if (forced === 'zh' || forced === 'en') return forced;
+  if (IN_APP) return 'zh';
   const first = (navigator.languages?.length ? navigator.languages : [navigator.language]).find(Boolean) ?? 'en';
   return first.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
@@ -52,7 +57,7 @@ const STRINGS = {
       [['小红花', '奖励一朵小红花'], ['金牌', '颁发一枚金牌'], ['红包', '发一个红包'], ['锦旗', '送一面锦旗'], ['金星', '奖励一颗金星']],
     ],
     log: ['闪避', '踢回', '湿透', '得意'], sound: '声音',
-    savePlate: '生成图版', share: '分享', download: '下载', plateHint: '长按图片即可保存。', site: 'fm.elixr.games',
+    savePlate: '生成图版', share: '分享', download: '下载', plateHint: '长按图片 · 保存到相册', site: 'fm.elixr.games',
     caution: '不能替代老师。请勿在家具附近尝试狗熊。',
   },
 } as const;

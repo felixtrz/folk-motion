@@ -5,7 +5,7 @@ import '@fontsource/instrument-serif/400-italic.css';
 import './hud.css';
 import type { Specimen } from './specimens.js';
 import type { SpecimenStats } from './motion-stats.js';
-import { LANG, T } from './i18n.js';
+import { IN_APP, LANG, T } from './i18n.js';
 
 export type HudHandlers = {
   /** A throwable was tapped; x/y is the button centre in client pixels (where the throw starts). */
@@ -65,7 +65,7 @@ export class Hud {
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers, soundOn: boolean) {
     this.soundOn = soundOn;
-    this.root.className = 'hud loading fresh';
+    this.root.className = `hud loading fresh${IN_APP ? ' in-app' : ''}`;
     document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
     document.title = T.title;
     this.root.innerHTML = `

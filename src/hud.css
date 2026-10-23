@@ -7,7 +7,8 @@
   --signal: #ff4d1a;
   --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --serif: 'Instrument Serif', 'Times New Roman', serif;
-  --zh: 'Songti SC', 'STSong', 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --zh: 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
+  --zh-sans: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
   --pad: max(16px, env(safe-area-inset-left));
 }
 html, body { background: var(--paper); overscroll-behavior: none; }
@@ -241,3 +242,20 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 .tray .item.flip-in { animation: flip-in .22s ease-out; }
 @keyframes flip-in { from { transform: perspective(320px) rotateY(-90deg); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tray .item.flip-out { transition: none; transform: none; } .tray .item.flip-in { animation: none; } }
+
+/* Chinese edition: Plex Mono has no Chinese glyphs, so name a clean Chinese sans as its
+   fallback on every platform (iOS, Android, Windows) instead of whatever the system picks;
+   small Chinese labels step up to a legible size with gentler tracking. */
+:lang(zh) .hud, :lang(zh) .plate-sheet { --mono: 'IBM Plex Mono', var(--zh-sans); }
+:lang(zh) .masthead, :lang(zh) .mast-subjects button, :lang(zh) .telemetry dt, :lang(zh) .function > .fn-head > span,
+:lang(zh) .foot-row .notes-toggle, :lang(zh) .foot-row .sound, :lang(zh) .plate-btn, :lang(zh) .sheet td:first-child {
+  font-size: 12px !important; letter-spacing: .04em;
+}
+:lang(zh) .tray .item .label { font-size: 12px; letter-spacing: .02em; }
+:lang(zh) .masthead b { font-weight: 600; }
+
+/* Inside Xiaohongshu / WeChat / Weibo / Douyin: share and download do nothing there, so the
+   plate is saved by long-press, and the hint says so prominently. */
+.in-app .plate-actions .share, .in-app .plate-actions .download { display: none; }
+.in-app .plate-sheet .hint { font-size: 13px; color: var(--ink); letter-spacing: .04em; }
+.in-app .plate-sheet img { max-height: calc(100% - 100px); }
