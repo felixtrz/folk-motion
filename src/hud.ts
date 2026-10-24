@@ -367,8 +367,10 @@ export class Hud {
       a.textContent = k; b.textContent = v; if (/[一-鿿]/.test(v)) b.lang = 'zh';
       tr.append(a, b); return tr;
     };
-    this.el.measures.replaceChildren(...rows.slice(zh ? 4 : 5).map(row));
-    this.el.table.replaceChildren(...rows.map(row));
+    // (No replaceChildren: it needs Chrome 86; the mini-tool container's floor is Chrome 61.)
+    const fill = (el: HTMLElement, nodes: Node[]) => { el.textContent = ''; nodes.forEach(n => el.appendChild(n)); };
+    fill(this.el.measures, rows.slice(zh ? 4 : 5).map(row));
+    fill(this.el.table, rows.map(row));
   }
 
   /** The words on the plate: whatever the field guide is showing now. */

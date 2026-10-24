@@ -58,9 +58,19 @@ const FORBIDDEN = [
   ['window.open / prompt', /window\.open\(|window\.prompt\(/], ['WebXR', /navigator\.xr|requestSession\(/],
   ['dynamic import / module syntax', /\bimport\(|import\.meta|^\s*(import|export)\s/m], ['download / _blank', /\bdownload=|_blank/],
 ];
+// Built-ins newer than the container's Chrome 61 floor. The build lowers syntax to ES2017 but
+// cannot polyfill these; one at load time stops the whole app (every button goes dead).
+const NEWER = [
+  ['Array.prototype.flat/flatMap (69)', /\.flatMap\(|\.flat\(\)/], ['Object.fromEntries (73)', /Object\.fromEntries/],
+  ['replaceChildren (86)', /\.replaceChildren\(/], ['replaceAll (85)', /\.replaceAll\(/], ['matchAll (73)', /\.matchAll\(/],
+  ['structuredClone (98)', /structuredClone\(/], ['Object.hasOwn (93)', /Object\.hasOwn\(/], ['Promise.allSettled/any (76/85)', /Promise\.(allSettled|any)\(/],
+  ['queueMicrotask (71)', /queueMicrotask\(/], ['findLast (97)', /\.findLast(Index)?\(/], ['globalThis (71)', /\bglobalThis\b/],
+  ['toSorted/toReversed (110)', /\.to(Sorted|Reversed|Spliced)\(/], ['trimStart/trimEnd (66)', /\.trim(Start|End)\(/],
+];
 for (const f of files.filter(f => /\.(js|html|css)$/.test(f))) {
   const text = readFileSync(f, 'utf8');
   for (const [name, re] of FORBIDDEN) if (re.test(text)) errors.push(`${relative(dist, f)}: forbidden capability: ${name}`);
+  if (f.endsWith('.js')) for (const [name, re] of NEWER) if (re.test(text)) errors.push(`${relative(dist, f)}: API newer than Chrome 61: ${name}`);
   const external = text.match(/(?:src=|href=|url\()["']?https?:\/\/[^"')\s]+/g);
   if (external) errors.push(`${relative(dist, f)}: external resource reference ${external[0]}`);
 }

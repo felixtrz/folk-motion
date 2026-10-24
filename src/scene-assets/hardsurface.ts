@@ -159,10 +159,9 @@ function flipWinding(geometry: BufferGeometry): void {
     return;
   }
 
-  const attributes: Array<BufferAttribute | InterleavedBufferAttribute> = [
-    ...Object.values(geometry.attributes),
-    ...Object.values(geometry.morphAttributes).flat(),
-  ];
+  // No Array.prototype.flat: the mini-tool container's floor is Chrome 61.
+  const attributes: Array<BufferAttribute | InterleavedBufferAttribute> = [...Object.values(geometry.attributes)];
+  for (const morph of Object.values(geometry.morphAttributes)) attributes.push(...morph);
   for (const attribute of attributes) {
     for (let triangle = 0; triangle + 2 < attribute.count; triangle += 3) {
       for (let component = 0; component < attribute.itemSize; component += 1) {

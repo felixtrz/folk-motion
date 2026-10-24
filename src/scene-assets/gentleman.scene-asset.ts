@@ -28,15 +28,21 @@ const grow = (sections: Section[], by: number) => sections.map(s => ({ ...s, w: 
 
 // Jacket: one skinned body, fitted at the waist with a short skirt over the hips.
 // Fine rings (every ~2 cm) so the V, the tie and the lapels cut cleanly from whole quads.
-const densify = (s: Section[], step: number): Section[] => s.flatMap((a, i) => {
-  const b = s[i + 1];
-  if (!b) return [a];
-  const n = Math.max(1, Math.round((b.y - a.y) / step)), lerp = (u: number, v: number, t: number) => u + (v - u) * t;
-  return Array.from({ length: n }, (_, k) => {
-    const t = k / n, fa = a.front ?? a.d, fb = b.front ?? b.d;
-    return { y: lerp(a.y, b.y, t), w: lerp(a.w, b.w, t), d: lerp(a.d, b.d, t), front: a.front !== undefined || b.front !== undefined ? lerp(fa, fb, t) : undefined };
+// (A plain loop, not flatMap: the mini-tool container's floor is Chrome 61.)
+const densify = (s: Section[], step: number): Section[] => {
+  const out: Section[] = [];
+  const lerp = (u: number, v: number, t: number) => u + (v - u) * t;
+  s.forEach((a, i) => {
+    const b = s[i + 1];
+    if (!b) { out.push(a); return; }
+    const n = Math.max(1, Math.round((b.y - a.y) / step));
+    for (let k = 0; k < n; k++) {
+      const t = k / n, fa = a.front ?? a.d, fb = b.front ?? b.d;
+      out.push({ y: lerp(a.y, b.y, t), w: lerp(a.w, b.w, t), d: lerp(a.d, b.d, t), front: a.front !== undefined || b.front !== undefined ? lerp(fa, fb, t) : undefined });
+    }
   });
-});
+  return out;
+};
 const torsoS: Section[] = densify([
   { y: .7, w: .07, d: .06 }, { y: .73, w: .19, d: .12 }, { y: .8, w: .19, d: .12, front: .124 }, { y: .92, w: .178, d: .114, front: .128 },
   { y: 1.05, w: .158, d: .106, front: .132 }, { y: 1.19, w: .166, d: .104, front: .13 }, { y: 1.3, w: .186, d: .104, front: .124 },
