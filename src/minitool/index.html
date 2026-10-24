@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>民间舞动作研究所</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #f7f7f5; overflow: hidden; }
+    body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    #scene-container { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
+    #scene-container canvas { display: block; width: 100%; height: 100%; }
+    .fallback { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; justify-content: center;
+      padding: 32px; background: #f7f7f5; color: #141413; font-family: 'Songti SC', 'Noto Serif CJK SC', serif; text-align: center; }
+    .fallback b { font-size: 28px; font-weight: 400; margin-bottom: 10px; }
+    .fallback span { font-family: 'PingFang SC', 'Noto Sans CJK SC', sans-serif; font-size: 13px; color: #5f5d57; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div id="scene-container"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

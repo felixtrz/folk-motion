@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "tsc -p tsconfig.tests.json && node --test .local/test-build/tests/*.test.js"
+    "test": "tsc -p tsconfig.tests.json && node --test .local/test-build/tests/*.test.js",
+    "build:minitool": "vite build --config vite.minitool.config.ts && node scripts/minitool/package.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

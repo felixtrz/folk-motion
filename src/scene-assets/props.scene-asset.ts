@@ -105,7 +105,7 @@ export const slipper = new Group(); slipper.name = 'Slipper';
 /** Football: 30 cm, white with black pentagon patches (flat-shaded, low poly). */
 export const football = new Group(); football.name = 'Football';
 {
-  const geometry = new IcosahedronGeometry(.15, 2).toNonIndexed();
+  const geometry = new IcosahedronGeometry(.15, 2);   // already non-indexed
   const pos = geometry.getAttribute('position'), colors: number[] = [];
   const corners = new IcosahedronGeometry(1, 0).getAttribute('position');
   const v = new Vector3(), c = new Vector3();

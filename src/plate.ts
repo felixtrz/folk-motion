@@ -1,3 +1,5 @@
+import wordmarkUrl from './brand/elixr-games-black.svg?url';
+
 /** A shareable specimen plate: the current moment, typeset like a field-guide page (3:4). */
 export type PlateInfo = {
   brand: string; guide: string; trial: string;
@@ -20,7 +22,7 @@ function wordmark(): Promise<HTMLImageElement | null> {
   mark ??= new Promise(resolve => {
     const img = new Image();
     img.onload = () => resolve(img); img.onerror = () => resolve(null);
-    img.src = `${import.meta.env.BASE_URL}brand/elixr-games-black.svg`;
+    img.src = wordmarkUrl;
   });
   return mark;
 }

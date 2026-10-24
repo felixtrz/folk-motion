@@ -6,6 +6,8 @@ import './hud.css';
 import type { Specimen } from './specimens.js';
 import type { SpecimenStats } from './motion-stats.js';
 import { IN_APP, LANG, T } from './i18n.js';
+import { MINITOOL, has, miniTool } from './platform.js';
+import wordmarkUrl from './brand/elixr-games-black.svg?url';
 
 export type HudHandlers = {
   /** A throwable was tapped; x/y is the button centre in client pixels (where the throw starts). */
@@ -20,8 +22,13 @@ export type HudHandlers = {
 const SUBJECTS = T.subjects;
 const STUDIO = 'https://elixr.games/';
 // The studio's wordmark, as a publisher's imprint: black on paper, links out.
-const IMPRINT = `<a class="imprint" href="${STUDIO}" target="_blank" rel="noopener" aria-label="${T.studio}" title="${T.studio}">`
-  + `<img src="${import.meta.env.BASE_URL}brand/elixr-games-black.svg" alt="EliXR Games" width="47" height="15"></a>`;
+// Inside the mini-tool container links cannot open, so the wordmark is a plain mark there.
+const MARK = `<img src="${wordmarkUrl}" alt="EliXR Games" width="47" height="15">`;
+const IMPRINT = MINITOOL
+  ? `<span class="imprint" data-k="imprint" title="EliXR Games">${MARK}</span>`
+  : `<a class="imprint" data-k="imprint" href="${STUDIO}" target="_blank" rel="noopener" aria-label="${T.studio}" title="${T.studio}">${MARK}</a>`;
+const studioLink = (text: string) => MINITOOL ? text : `<a href="${STUDIO}" target="_blank" rel="noopener">${text}</a>`;
+const SOURCE = MINITOOL ? 'bilibili BV1YMaA6jEpK' : '<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>';
 // Line drawings of the throwables, drawn like specimen-plate figures: [slot][variant].
 const ICONS = [
   [
@@ -91,6 +98,7 @@ export class Hud {
         <div class="foot-row">
           <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">${T.notesButton}</button>
           ${IMPRINT}
+          <button class="follow" data-k="follow" hidden>${T.follow}</button>
           <button class="sound" data-k="sound" aria-pressed="${soundOn}"></button>
         </div>
       </footer>
@@ -99,18 +107,19 @@ export class Hud {
         <div class="sheet-head"><h2 data-k="sheetTitle"></h2></div>
         <div class="sub" data-k="sheetSub"></div>
         <table><tbody data-k="table"></tbody></table>
-        <p class="foot">${T.method}<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>.</p>
+        <p class="foot">${T.method}${SOURCE}.</p>
         <p class="foot caution">${T.caution}</p>
-        <p class="foot">${LANG === 'zh' ? `<a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a> ${T.imprint}` : `${T.imprint} <a href="${STUDIO}" target="_blank" rel="noopener">EliXR Games</a>`}</p>
+        <p class="foot">${LANG === 'zh' ? `${studioLink('EliXR Games')} ${T.imprint}` : `${T.imprint} ${studioLink('EliXR Games')}`}</p>
         <button class="xr" data-k="xr" hidden>${T.xr}</button>
       </section>
       <section class="plate-sheet" data-k="plateSheet" aria-label="${T.savePlate}">
         <img data-k="plateImg" alt="">
-        <p class="hint">${T.plateHint}</p>
+        <p class="hint" data-k="plateHint">${MINITOOL ? '' : T.plateHint}</p>
         <div class="plate-actions">
           <button class="close" data-k="plateClose">${T.close}</button>
-          <a class="download" data-k="plateDownload" download="folk-motion-plate.png">${T.download}</a>
-          <button class="share" data-k="plateShare">${T.share} ↗</button>
+          ${MINITOOL
+            ? `<button class="save" data-k="plateSave">${T.saveAlbum}</button><button class="post" data-k="plateNote">${T.postNote} ↗</button>`
+            : `<a class="download" data-k="plateDownload" download="folk-motion-plate.png">${T.download}</a><button class="share" data-k="plateShare">${T.share} ↗</button>`}
         </div>
       </section>`;
     this.root.querySelectorAll<HTMLElement>('[data-k]').forEach(node => { this.el[node.dataset.k!] = node; });
@@ -133,7 +142,8 @@ export class Hud {
     this.el.xr.addEventListener('click', () => this.on.enterXR());
     this.el.plateBtn.addEventListener('click', () => this.on.plate());
     this.el.plateClose.addEventListener('click', () => this.closePlate());
-    this.el.plateShare.addEventListener('click', () => {
+    if (MINITOOL) this.bindContainer();
+    else this.el.plateShare.addEventListener('click', () => {
       // Sharing needs a fresh tap, so the image is prepared before this button is pressed.
       const file = this.plateFile;
       if (file && navigator.canShare?.({ files: [file] })) void navigator.share({ files: [file], title: T.title }).catch(() => undefined);
@@ -274,11 +284,55 @@ export class Hud {
       this.plateFile = new File([blob], 'folk-motion-plate.png', { type: 'image/png' });
       this.plateUrl = URL.createObjectURL(blob);
       (this.el.plateImg as HTMLImageElement).src = this.plateUrl;
-      (this.el.plateDownload as HTMLAnchorElement).href = this.plateUrl;
+      if (this.el.plateDownload) (this.el.plateDownload as HTMLAnchorElement).href = this.plateUrl;
       this.el.plateSheet.dataset.open = 'true';
     }, 'image/png');
   }
   closePlate(): void { this.el.plateSheet.dataset.open = 'false'; }
+
+  /**
+   * Inside the container: the plate is saved with saveImageToPhotosAlbum and posted with
+   * postNote (both via a temp file, as the container advises for large images); a follow
+   * button appears where followAuthor exists (9.51+); the header clears the container's
+   * menu buttons (getWindowInfo, 9.49+).
+   */
+  private bindContainer(): void {
+    const api = miniTool();
+    const say = (text: string) => { this.el.plateHint.textContent = text; };
+    const tempFile = async (): Promise<string> => {
+      const img = this.el.plateImg as HTMLImageElement;
+      const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d')!.drawImage(img, 0, 0);
+      const data = c.toDataURL('image/jpeg', .92);
+      if (api && typeof api.writeTempFile === 'function') return String((await api.writeTempFile({ data })).filePath);
+      return data;
+    };
+    this.el.plateSave.addEventListener('click', async () => {
+      if (!api || typeof api.saveImageToPhotosAlbum !== 'function') { say(T.failed); return; }
+      try { await api.saveImageToPhotosAlbum({ filePath: await tempFile() }); say(T.saved); } catch { say(T.failed); }
+    });
+    this.el.plateNote.addEventListener('click', async () => {
+      if (!api || typeof api.postNote !== 'function') { say(T.failed); return; }
+      try {
+        await api.postNote({ title: T.noteTitle, content: T.noteContent, pageType: 'photo_publish', mediaInfo: { image_resources: [{ url: await tempFile() }] } });
+      } catch { say(T.failed); }
+    });
+    if (has('followAuthor')) {
+      const button = this.el.follow as HTMLButtonElement;
+      const paint = (status: unknown) => { const on = status === 1 || status === 2; button.textContent = on ? T.followed : T.follow; button.disabled = on; };
+      button.hidden = false; this.el.imprint.hidden = true;
+      if (has('getFollowStatus')) api!.getFollowStatus!().then(r => paint(r.follow_status)).catch(() => undefined);
+      button.addEventListener('click', () => { api!.followAuthor!().then(r => paint(r.follow_status)).catch(() => undefined); });
+    }
+    if (has('getWindowInfo')) {
+      api!.getWindowInfo!().then(info => {
+        const buttons = (info.menuButtons ?? {}) as Record<string, { bottom?: number } | null>;
+        let bottom = 0;
+        for (const b of Object.values(buttons)) if (b && typeof b.bottom === 'number') bottom = Math.max(bottom, b.bottom);
+        if (bottom) { this.root.style.setProperty('--container-top', `${bottom + 6}px`); window.dispatchEvent(new Event('resize')); }
+      }).catch(() => undefined);
+    }
+  }
 
   private paintSound(): void {
     this.el.sound.textContent = `${T.sound} ${this.soundOn ? '●' : '○'}`;

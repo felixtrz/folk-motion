@@ -54,3 +54,9 @@ assets/character/
 
 # Per-machine agent config (absolute local paths)
 opencode.json
+
+# Mini-tool build output and zip (npm run build:minitool)
+/dist-minitool/
+/minitool/
+# Xiaohongshu's minitool-zip-builder skill (third-party; install locally to run its audits)
+.claude/skills/minitool-zip-builder/

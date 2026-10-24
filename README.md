@@ -139,6 +139,27 @@ Design review tooling (headless Chromium, production build served by `vite previ
 `scripts/phone-shots.mjs`, `scripts/avatar-shots.mjs` with `review-sheet.py` /
 `avatar-sheet.py`.
 
+## Xiaohongshu mini-tool (小工具)
+
+The same field trial also ships as a Xiaohongshu mini-tool: an offline H5 zip the app's
+container loads (rules in `.claude/skills/minitool-zip-builder`).
+
+```sh
+npm run build:minitool     # → minitool/folk-motion-minitool.zip
+```
+
+`vite.minitool.config.ts` builds `src/minitool/` into one classic script targeting Chrome 61 /
+ES2017, with no IWSDK runtime (its workers, WebAssembly, dynamic imports and WebXR are not
+allowed there): `@iwsdk/core` is mapped to plain Three.js, the scene is rebuilt in code
+(`src/minitool/main.ts`), the characters come from their procedural source modules and the
+motion is bundled. The stage itself (`src/stage.ts`) is shared with the website. Inside the
+container (`src/platform.ts`): plates are saved with `saveImageToPhotosAlbum` and posted with
+`postNote`, a 关注作者 button uses `followAuthor`, haptics use `vibrateShort`, the header clears
+the container's menu buttons (`getWindowInfo`), and there are no links, downloads or fetches.
+WebGL stays inside the container's budget (pixel ratio ≤ 1.5, ~2 M pixels, a lower tier when
+frames run slow, paused while hidden, a fallback screen without WebGL or after context loss).
+`scripts/minitool/package.mjs` checks the package, zips it and runs the skill's audits.
+
 ## Headset lesson
 
 In an immersive session the original guided lesson returns: three shapes per move, a
