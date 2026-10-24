@@ -91,8 +91,22 @@ export async function composePlate(shot: CanvasImageSource, info: PlateInfo): Pr
   // Caption: label, result (in the signal colour), the observed function.
   g.fillStyle = INK3; g.font = `400 22px ${info.zhText ? `${MONO}, ${ZH}` : MONO}`;
   spaced(g, info.fnLabel.toUpperCase(), L, 1196, info.zhText ? 1 : 2.2);
-  g.fillStyle = SIGNAL; g.font = `500 22px ${info.zhText ? `${MONO}, ${ZH}` : MONO}`;
-  spaced(g, info.result.toUpperCase(), R, 1196, info.zhText ? 1 : 2.2, 'right');
+  // The outcome reads as a stamp on the plate (an annotation, not a heading): thin outline,
+  // small light type, set slightly askew.
+  if (info.result) {
+    const text = info.result.toUpperCase(), sp = info.zhText ? 1 : 1.8;
+    g.save();
+    g.font = `400 17px ${info.zhText ? `${MONO}, ${ZH}` : MONO}`;
+    let w = -sp;
+    for (const ch of text) w += g.measureText(ch).width + sp;
+    const bw = w + 22, bh = 32;
+    g.translate(R - bw / 2 - 2, 1188); g.rotate(-.055);
+    g.globalAlpha = .92;
+    g.strokeStyle = SIGNAL; g.lineWidth = 1.5; g.strokeRect(-bw / 2, -bh / 2, bw, bh);
+    g.fillStyle = SIGNAL; g.textBaseline = 'middle';
+    spaced(g, text, -bw / 2 + 11, 1, sp);
+    g.restore();
+  }
   g.fillStyle = INK; g.font = info.zhText ? `400 46px ${ZH}` : `italic 52px ${SERIF}`;
   wrap(g, info.fnText, R - L, 2, info.zhText).forEach((line, i) => g.fillText(line, L, 1258 + i * 58));
 
