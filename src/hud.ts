@@ -6,7 +6,7 @@ import './hud.css';
 import type { Specimen } from './specimens.js';
 import type { SpecimenStats } from './motion-stats.js';
 import { IN_APP, LANG, T } from './i18n.js';
-import { MINITOOL, has, miniTool } from './platform.js';
+import { MINITOOL, has, loadValue, miniTool, saveValue } from './platform.js';
 import wordmarkUrl from './brand/elixr-games-black.svg?url';
 
 export type HudHandlers = {
@@ -30,6 +30,9 @@ const IMPRINT = MINITOOL
 const studioLink = (text: string) => MINITOOL ? text : `<a href="${STUDIO}" target="_blank" rel="noopener">${text}</a>`;
 const SOURCE = MINITOOL ? 'bilibili BV1YMaA6jEpK' : '<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>';
 // Line drawings of the throwables, drawn like specimen-plate figures: [slot][variant].
+const ASK_AFTER = 10;   // throws before the tray asks for a follow
+const ASKED_KEY = 'fms-follow-ask';   // 'declined' or 'followed': the tray never asks again
+
 const ICONS = [
   [
     '<path d="M11 6.5h10l1.5 2v15l-1.5 2H11l-1.5-2v-15z"/><path d="M9.5 12.5h13M9.5 19.5h13M14 4.8h4"/>',
@@ -72,6 +75,12 @@ export class Hud {
   private plateFile: File | null = null;
   private busy = false;
   private readonly pendingFlips = new Map<number, number>();
+  // The follow prompt: after ASK_AFTER throws the tray's card pairs merge into "follow" and
+  // "decline" (once a session, only in the container, only if not already following).
+  private trials = 0;
+  private asked = false;
+  private following = false;
+  private follow: (() => Promise<boolean>) | null = null;
   private plateUrl = '';
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers, soundOn: boolean) {
@@ -98,6 +107,10 @@ export class Hud {
         </dl>
         <nav class="tray" data-k="tray">
           ${T.items.map((_, i) => `<button class="item" data-i="${i}"></button>`).join('')}
+          <div class="ask" data-k="ask" aria-hidden="true">
+            <button class="yes" data-k="askYes" tabindex="-1"><b data-k="askYesText">${T.askFollow}</b><span data-k="askYesSub">${T.askFollowSub}</span></button>
+            <button class="no" data-k="askNo" tabindex="-1"><b>${T.askNo}</b><span>${T.askNoSub}</span></button>
+          </div>
         </nav>
         <div class="foot-row">
           <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">${T.notesButton}</button>
@@ -191,6 +204,20 @@ export class Hud {
       // Cards flip to their next item once he has finished responding.
       this.pendingFlips.forEach((variant, slot) => this.flipNow(slot, variant));
       this.pendingFlips.clear();
+      // After the card flips have played.
+      if (this.follow && !this.asked && !this.following && this.trials >= ASK_AFTER) { this.asked = true; setTimeout(() => this.ask(true), 480); }
+    }
+  }
+
+  private ask(on: boolean): void {
+    const tray = this.el.tray;
+    tray.classList.toggle('asking', on);
+    this.el.ask.setAttribute('aria-hidden', String(!on));
+    for (const k of ['askYes', 'askNo']) this.el[k].tabIndex = on ? 0 : -1;
+    if (!on) {
+      // The cards slide back out of the merged buttons; 'returning' carries the slower timing.
+      tray.classList.add('returning');
+      setTimeout(() => tray.classList.remove('returning'), 700);
     }
   }
 
@@ -221,6 +248,7 @@ export class Hud {
   }
   /** Counts per outcome; `changed` flashes the one that just went up. */
   setLog(counts: readonly number[], trials: number, changed = -1): void {
+    this.trials = trials;
     counts.forEach((n, i) => this.text(`log${i}`, String(n).padStart(2, '0')));
     this.text('count', `${T.trial} ${String(trials).padStart(3, '0')}`);
     if (changed >= 0) {
@@ -323,10 +351,28 @@ export class Hud {
     });
     if (has('followAuthor')) {
       const button = this.el.follow as HTMLButtonElement;
-      const paint = (status: unknown) => { const on = status === 1 || status === 2; button.textContent = on ? T.followed : T.follow; button.disabled = on; };
+      const paint = (status: unknown) => {
+        const on = status === 1 || status === 2;
+        button.textContent = on ? T.followed : T.follow; button.disabled = on; this.following = on;
+        return on;
+      };
       button.hidden = false; this.el.imprint.hidden = true;
       if (has('getFollowStatus')) api!.getFollowStatus!().then(r => paint(r.follow_status)).catch(() => undefined);
-      button.addEventListener('click', () => { api!.followAuthor!().then(r => paint(r.follow_status)).catch(() => undefined); });
+      this.follow = () => api!.followAuthor!().then(r => paint(r.follow_status)).catch(() => false);
+      button.addEventListener('click', () => { void this.follow!(); });
+      void loadValue(ASKED_KEY).then(v => { if (v) this.asked = true; });
+      const settle = (answer: string) => { void saveValue(ASKED_KEY, answer); };
+      this.el.askYes.addEventListener('click', () => {
+        void this.follow!().then(on => {
+          // Cancelling the container's confirmation counts as a decline.
+          settle(on ? 'followed' : 'declined');
+          if (!on) { this.ask(false); return; }
+          // A beat of thanks on the button itself, then the cards come back.
+          this.el.askYesText.textContent = T.followed; this.el.askYesSub.textContent = T.askThanks; this.el.askYes.classList.add('done');
+          setTimeout(() => this.ask(false), 1100);
+        });
+      });
+      this.el.askNo.addEventListener('click', () => { settle('declined'); this.ask(false); });
     }
     if (has('getWindowInfo')) {
       api!.getWindowInfo!().then(info => {

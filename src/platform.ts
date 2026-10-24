@@ -8,7 +8,7 @@ export const MINITOOL = typeof __MINITOOL__ !== 'undefined' && __MINITOOL__;
 
 type Callable = (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 type MiniTool = Partial<Record<'saveImageToPhotosAlbum' | 'writeTempFile' | 'postNote' | 'vibrateShort' | 'followAuthor'
-  | 'getFollowStatus' | 'getWindowInfo', Callable>>;
+  | 'getFollowStatus' | 'getWindowInfo' | 'getStorage' | 'setStorage', Callable>>;
 
 /** The container API, or null outside the container (and in old clients). */
 export function miniTool(): MiniTool | null {
@@ -19,6 +19,23 @@ export function miniTool(): MiniTool | null {
 export function has(name: keyof MiniTool): boolean {
   const api = miniTool();
   return !!api && typeof api[name] === 'function';
+}
+
+/** Persistent key/value: the container's Storage (9.46+), else localStorage. Never throws. */
+export async function loadValue(key: string): Promise<string | null> {
+  const api = miniTool();
+  try {
+    if (api && typeof api.getStorage === 'function') { const r = await api.getStorage({ key }); return typeof r.data === 'string' ? JSON.parse(r.data) : null; }
+    const v = localStorage.getItem(key);
+    return v === null ? null : JSON.parse(v);
+  } catch { return null; }
+}
+export async function saveValue(key: string, value: string): Promise<void> {
+  const api = miniTool();
+  try {
+    if (api && typeof api.setStorage === 'function') await api.setStorage({ key, data: JSON.stringify(value) });
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch { /* not persisted: the prompt may come back next session, never within this one */ }
 }
 
 /** A short tap of haptics: the container's vibrateShort (9.50+), else the Web API. */
