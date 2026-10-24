@@ -1,0 +1,245 @@
+{
+ "fps": 30,
+ "viewport": [
+  480,
+  640
+ ],
+ "heroBand": [
+  0.2,
+  0.95
+ ],
+ "note": "Segments play back to back. 'pre' seconds run uncaptured first; action times are relative to the segment's first captured frame (negative = during pre-roll). throw: [slot, variant] via the review hook (from bottom centre, HUD hidden); tap: a CSS selector tapped on the visible UI.",
+ "segments": [
+  {
+   "id": "hook",
+   "page": "hero",
+   "subject": 2,
+   "dur": 3.0,
+   "pre": 0.5,
+   "actions": [
+    [
+     0.25,
+     "throw",
+     [
+      0,
+      2
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "民间舞动作研究所",
+    "title": "朝他扔东西",
+    "sub": "他只会用民间舞回应"
+   }
+  },
+  {
+   "id": "tap-can",
+   "page": "ui",
+   "subject": 0,
+   "dur": 3.6,
+   "pre": 0.4,
+   "actions": [
+    [
+     0.5,
+     "tap",
+     ".tray .item:nth-child(1)"
+    ]
+   ]
+  },
+  {
+   "id": "kick",
+   "page": "hero",
+   "subject": 2,
+   "dur": 3.4,
+   "pre": 0.9,
+   "actions": [
+    [
+     -0.6,
+     "throw",
+     [
+      1,
+      0
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "02 · 毽子",
+    "title": "踢回去",
+    "sub": "浪子踢球"
+   }
+  },
+  {
+   "id": "boba",
+   "page": "hero",
+   "subject": 1,
+   "dur": 3.8,
+   "pre": 0.5,
+   "actions": [
+    [
+     -0.2,
+     "throw",
+     [
+      2,
+      2
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "03 · 奶茶",
+    "title": "湿透",
+    "sub": "狗熊哆嗦毛"
+   }
+  },
+  {
+   "id": "flower",
+   "page": "ui",
+   "subject": 0,
+   "dur": 4.4,
+   "pre": 0.3,
+   "actions": [
+    [
+     0.4,
+     "tap",
+     ".tray .item:nth-child(4)"
+    ]
+   ]
+  },
+  {
+   "id": "m-tomato",
+   "page": "hero",
+   "subject": 2,
+   "dur": 1.5,
+   "pre": 0.6,
+   "actions": [
+    [
+     -0.35,
+     "throw",
+     [
+      2,
+      4
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "20 种道具",
+    "title": "番茄",
+    "sub": ""
+   }
+  },
+  {
+   "id": "m-eraser",
+   "page": "hero",
+   "subject": 0,
+   "dur": 1.2,
+   "pre": 0.6,
+   "actions": [
+    [
+     -0.25,
+     "throw",
+     [
+      0,
+      3
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "20 种道具",
+    "title": "黑板擦",
+    "sub": ""
+   }
+  },
+  {
+   "id": "m-melon",
+   "page": "hero",
+   "subject": 1,
+   "dur": 1.6,
+   "pre": 1.2,
+   "actions": [
+    [
+     -1.0,
+     "throw",
+     [
+      1,
+      3
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "20 种道具",
+    "title": "西瓜",
+    "sub": ""
+   }
+  },
+  {
+   "id": "m-medal",
+   "page": "hero",
+   "subject": 2,
+   "dur": 1.6,
+   "pre": 0.6,
+   "actions": [
+    [
+     -0.3,
+     "throw",
+     [
+      3,
+      1
+     ]
+    ]
+   ],
+   "caption": {
+    "kicker": "20 种道具",
+    "title": "金牌",
+    "sub": ""
+   }
+  },
+  {
+   "id": "plate",
+   "page": "ui",
+   "subject": 2,
+   "dur": 4.2,
+   "pre": 2.4,
+   "actions": [
+    [
+     -2.0,
+     "tap",
+     ".tray .item:nth-child(4)"
+    ],
+    [
+     0.7,
+     "tap",
+     "[data-k=plateBtn]"
+    ]
+   ],
+   "next": [
+    [
+     3,
+     0
+    ]
+   ]
+  },
+  {
+   "id": "end",
+   "page": "card",
+   "dur": 3.0
+  },
+  {
+   "id": "cover-kick",
+   "still": true,
+   "page": "hero",
+   "subject": 2,
+   "az": -14,
+   "dur": 2.4,
+   "pre": 0.2,
+   "actions": [
+    [
+     0.0,
+     "throw",
+     [
+      1,
+      1
+     ]
+    ]
+   ]
+  }
+ ]
+}

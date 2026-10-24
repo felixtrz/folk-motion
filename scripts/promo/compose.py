@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).parent
@@ -24,6 +23,7 @@ CACHE = Path('.local/promo-fonts'); CACHE.mkdir(parents=True, exist_ok=True)
 def woff(path, name):
     out = CACHE / name
     if not out.exists():
+        from fontTools.ttLib import TTFont   # only needed once, to unpack the woff
         f = TTFont(path); f.flavor = None; f.save(out)
     return str(out)
 

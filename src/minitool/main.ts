@@ -15,6 +15,7 @@ import { robot } from '../scene-assets/robot.scene-asset.js';
 import { croc } from '../scene-assets/croc.scene-asset.js';
 import { studio } from '../scene-assets/studio.scene-asset.js';
 import { GradientEnvironment } from './gradient-environment.js';
+import bgm from './audio/bgm.m4a?url';   // scripts/promo/music_trial.py loop
 import flashStep from '../../public/motion/flash-step.json';
 import ballKick from '../../public/motion/ball-kick.json';
 import bearShake from '../../public/motion/bear-shake.json';
@@ -25,6 +26,9 @@ const STAGE_AT = [0.7, 0, -2.8] as const;
 // WebGL budget for mobile WebViews: pixel ratio at most 1.5 (1 on the low tier), drawing
 // buffer at most ~2 M pixels (~1 M on the low tier).
 const TIERS = [{ dpr: 1.5, pixels: 2e6 }, { dpr: 1, pixels: 1e6 }];
+// Promo captures (?review=1) render at the video's full resolution.
+const REVIEW = /[?&]review=1/.test(location.search);
+if (REVIEW) TIERS[0].dpr = 3;
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 
@@ -101,6 +105,7 @@ function start(): void {
     add: object => { scene.add(object); },
     loadMotions: () => Promise.resolve(MOVES.map(move => MOTION[move.id])),
     maxPixelRatio: TIERS[tier].dpr,
+    music: bgm,
   });
   resize();
   window.addEventListener('resize', resize);
@@ -115,7 +120,7 @@ function start(): void {
     // Sustained frames slower than ~28 fps: lower the resolution and the shadow refresh.
     frames++;
     slow = dt > 1 / 28 ? slow + 1 : Math.max(0, slow - 1);
-    if (tier === 0 && frames > 90 && slow > 45) { tier = 1; stage.setLowPower(true); resize(); }
+    if (!REVIEW && tier === 0 && frames > 90 && slow > 45) { tier = 1; stage.setLowPower(true); resize(); }
   };
   const run = (on: boolean) => {
     if (on === running) return;

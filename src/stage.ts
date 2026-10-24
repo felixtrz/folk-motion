@@ -10,7 +10,7 @@ import { MOVES, validateMotion, type Motion } from './motion.js';
 import { SPECIMENS } from './specimens.js';
 import { Sfx } from './sfx.js';
 import { Trial, type Kind, type Prop } from './trial.js';
-import { ITEMS, SLOTS } from './items.js';
+import { ITEMS, SLOTS, type ItemId } from './items.js';
 import { composePlate, PLATE_W, SHOT_H } from './plate.js';
 import { T } from './i18n.js';
 import { haptic } from './platform.js';
@@ -64,6 +64,7 @@ export type StageHost = {
   loadMotions(): Promise<unknown[]>;
   /** Set when the host manages the pixel ratio itself (the mini-tool's WebGL budget). */
   maxPixelRatio?: number;
+  music?: string;          // looping background music (the mini-tool ships one)
   /** Headset lesson (website only). */
   xr?: { presenting(): boolean; supported(): Promise<boolean>; launch(): void; panel: Object3D };
 };
@@ -119,6 +120,9 @@ export class TrialStage {
   private bandOverride: number[] | null = null;   // review captures only
   private seekRequest: { clip: number; t: number } | null = null;
   private timeScale = 1;   // review only: slow motion for inspecting contacts
+  private stepping = false;   // review only: time advances only by step(dt)
+  private pendingStep = 0;
+  private clock = 0;
   private lastOutcome = -1;
   private readonly variant = [0, 0, 0, 0];   // which item each tray slot throws next
   private readonly size = new Vector2();
@@ -134,6 +138,13 @@ export class TrialStage {
     this.readUrl();
     this.sfx = new Sfx();
     this.cleanups.push(() => this.sfx.dispose());
+    if (this.host.music) {
+      this.sfx.setMusic(this.host.music);
+      // The music starts on the first touch anywhere (browsers need a gesture for audio).
+      const first = () => { this.sfx.wake(); window.removeEventListener('pointerdown', first); };
+      window.addEventListener('pointerdown', first);
+      this.cleanups.push(() => window.removeEventListener('pointerdown', first));
+    }
     this.hud = new Hud(SPECIMENS, {
       throw: (i, x, y) => this.throwAt(i, x, y),
       subject: i => this.selectSubject(i),
@@ -173,6 +184,21 @@ export class TrialStage {
       },
       throw: (i: number) => this.throwAt(i, innerWidth / 2, innerHeight * .88),
       timeScale: (k: number) => { this.timeScale = k; },
+      // Frame-exact capture: real time stops; each step(dt) is consumed by the next update.
+      stepping: (on: boolean) => { this.stepping = on; this.pendingStep = 0; },
+      step: (dt: number) => { this.pendingStep += dt; },
+      clock: () => this.clock,
+      // Sets which item a tray slot throws next (and shows it on the card).
+      next: (slot: number, v: number) => { this.variant[slot] = v; this.hud.flipCard(slot, v); },
+      cues: [] as { cue: string; t: number }[],
+      // Stills: a static copy of an item, offset (metres) from the subject's hips.
+      prop: (id: ItemId, x: number, y: number, z: number, scale = 1) => {
+        const o = ITEMS[id].proto.clone(true);
+        this.subjects[this.subject].hips.getWorldPosition(o.position);
+        o.position.x += x; o.position.y += y; o.position.z += z; o.scale.setScalar(scale);
+        o.rotation.set(.4, .7, .2);
+        this.host.add(o);
+      },
       state: () => ({ busy: this.busy, clip: this.cur.clip, t: this.cur.t, counts: [...this.counts], anchor: [this.anchorX, this.anchorZ], manual: this.manual }),
       subject: (i: number) => this.selectSubject(i),
       band: (band: number[] | null) => { this.bandOverride = band; this.bandDirty = true; },
@@ -187,6 +213,9 @@ export class TrialStage {
         return out;
       },
     };
+    const review = (window as unknown as { __review: { cues: { cue: string; t: number }[] } }).__review;
+    const play = this.sfx.play.bind(this.sfx);
+    this.sfx.play = cue => { review.cues.push({ cue, t: this.clock }); play(cue); };
   }
 
   private setupStudio(): void {
@@ -543,7 +572,9 @@ export class TrialStage {
   }
 
   update(delta: number): void {
+    if (this.stepping) { delta = this.pendingStep; this.pendingStep = 0; }
     delta *= this.timeScale;
+    this.clock += delta;
     const presenting = (this.host.xr?.presenting() ?? false);
     if (presenting !== this.presenting) {
       this.presenting = presenting;

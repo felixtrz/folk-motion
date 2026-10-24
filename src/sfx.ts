@@ -1,4 +1,5 @@
-/** Tiny synthesised sound effects (no audio files). Created on the first user gesture. */
+/** Tiny synthesised sound effects (no audio files), plus an optional looping music bed.
+ * Created on the first user gesture. */
 export type Cue = 'throw' | 'clank' | 'clink' | 'thud' | 'kick' | 'splash' | 'chime' | 'swoosh';
 
 const KEY = 'fms-sound';
@@ -8,6 +9,12 @@ export class Sfx {
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   enabled = true;
+  private musicUrl: string | null = null;
+  private music: HTMLAudioElement | null = null;
+  private readonly onVisibility = () => {
+    if (!this.music) return;
+    if (document.visibilityState === 'hidden') this.music.pause(); else if (this.enabled) this.resumeMusic();
+  };
 
   constructor() {
     try { this.enabled = localStorage.getItem(KEY) !== 'off'; } catch { /* storage blocked: default on */ }
@@ -16,7 +23,18 @@ export class Sfx {
   setEnabled(on: boolean): void {
     this.enabled = on;
     try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch { /* not persisted */ }
-    if (on) this.wake();
+    if (on) this.wake(); else this.music?.pause();
+  }
+
+  /** A looping music bed (a packaged audio file); it starts with the first gesture. */
+  setMusic(url: string): void {
+    this.musicUrl = url;
+    document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  private resumeMusic(): void {
+    const playing = this.music?.play();
+    if (playing) playing.catch(() => undefined);   // blocked until a gesture: the next wake() retries
   }
 
   /** Must run inside a user gesture on mobile browsers. */
@@ -33,6 +51,13 @@ export class Sfx {
       for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+    if (this.musicUrl) {
+      if (!this.music) {
+        this.music = new Audio(this.musicUrl);
+        this.music.loop = true; this.music.volume = .32;
+      }
+      if (this.music.paused && document.visibilityState !== 'hidden') this.resumeMusic();
+    }
   }
 
   play(cue: Cue): void {
@@ -76,5 +101,9 @@ export class Sfx {
     s.connect(f); f.connect(g); g.connect(this.master!); s.start(t); s.stop(t + dur + .02);
   }
 
-  dispose(): void { void this.ctx?.close(); }
+  dispose(): void {
+    void this.ctx?.close();
+    document.removeEventListener('visibilitychange', this.onVisibility);
+    if (this.music) { this.music.pause(); this.music.removeAttribute('src'); this.music.load(); this.music = null; }
+  }
 }
