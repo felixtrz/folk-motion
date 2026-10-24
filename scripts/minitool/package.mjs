@@ -10,7 +10,8 @@ const dist = join(root, 'dist-minitool');
 const outDir = join(root, 'minitool');
 const zipPath = join(outDir, 'folk-motion-minitool.zip');
 const skill = join(root, '.claude/skills/minitool-zip-builder/scripts');
-const ALLOWED = new Set(['.html', '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.woff', '.woff2', '.json', '.m4a', '.mp3']);
+// Exactly the upload check's list (it rejects anything else, audio included).
+const ALLOWED = new Set(['.html', '.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.woff', '.woff2', '.json']);
 const errors = [], notes = [];
 
 const walk = dir => readdirSync(dir).flatMap(name => {

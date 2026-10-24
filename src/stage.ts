@@ -64,7 +64,7 @@ export type StageHost = {
   loadMotions(): Promise<unknown[]>;
   /** Set when the host manages the pixel ratio itself (the mini-tool's WebGL budget). */
   maxPixelRatio?: number;
-  music?: string;          // looping background music (the mini-tool ships one)
+  music?: boolean;         // looping background music (the mini-tool plays one)
   /** Headset lesson (website only). */
   xr?: { presenting(): boolean; supported(): Promise<boolean>; launch(): void; panel: Object3D };
 };
@@ -139,7 +139,7 @@ export class TrialStage {
     this.sfx = new Sfx();
     this.cleanups.push(() => this.sfx.dispose());
     if (this.host.music) {
-      this.sfx.setMusic(this.host.music);
+      this.sfx.setMusic();
       // The music starts on the first touch anywhere (browsers need a gesture for audio).
       const first = () => { this.sfx.wake(); window.removeEventListener('pointerdown', first); };
       window.addEventListener('pointerdown', first);

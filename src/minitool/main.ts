@@ -15,7 +15,6 @@ import { robot } from '../scene-assets/robot.scene-asset.js';
 import { croc } from '../scene-assets/croc.scene-asset.js';
 import { studio } from '../scene-assets/studio.scene-asset.js';
 import { GradientEnvironment } from './gradient-environment.js';
-import bgm from './audio/bgm.m4a?url';   // scripts/promo/music_trial.py loop
 import flashStep from '../../public/motion/flash-step.json';
 import ballKick from '../../public/motion/ball-kick.json';
 import bearShake from '../../public/motion/bear-shake.json';
@@ -105,7 +104,7 @@ function start(): void {
     add: object => { scene.add(object); },
     loadMotions: () => Promise.resolve(MOVES.map(move => MOTION[move.id])),
     maxPixelRatio: TIERS[tier].dpr,
-    music: bgm,
+    music: true,
   });
   resize();
   window.addEventListener('resize', resize);
