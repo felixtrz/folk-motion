@@ -8,7 +8,7 @@ export const MINITOOL = typeof __MINITOOL__ !== 'undefined' && __MINITOOL__;
 
 type Callable = (options?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 type MiniTool = Partial<Record<'saveImageToPhotosAlbum' | 'writeTempFile' | 'postNote' | 'vibrateShort' | 'followAuthor'
-  | 'getFollowStatus' | 'getWindowInfo' | 'getStorage' | 'setStorage', Callable>>;
+  | 'getFollowStatus' | 'getWindowInfo' | 'getStorage' | 'setStorage' | 'interactionOpenApi' | 'getLaunchOptions', Callable>>;
 
 /** The container API, or null outside the container (and in old clients). */
 export function miniTool(): MiniTool | null {

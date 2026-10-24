@@ -13,6 +13,7 @@ import { MOVES } from '../motion.js';
 import { instructor } from '../scene-assets/instructor.scene-asset.js';
 import { robot } from '../scene-assets/robot.scene-asset.js';
 import { croc } from '../scene-assets/croc.scene-asset.js';
+import { gentleman } from '../scene-assets/gentleman.scene-asset.js';
 import { studio } from '../scene-assets/studio.scene-asset.js';
 import { GradientEnvironment } from './gradient-environment.js';
 import flashStep from '../../public/motion/flash-step.json';
@@ -64,7 +65,7 @@ function start(): void {
     const holder = new Group(); holder.name = name; holder.position.set(...STAGE_AT);
     holder.add(object); scene.add(holder); named.set(name, holder);
   };
-  place('Instructor', instructor); place('Robot', robot); place('Croc', croc);
+  place('Instructor', instructor); place('Robot', robot); place('Croc', croc); place('Gentleman', gentleman);
   scene.add(studio); studio.position.set(...STAGE_AT); named.set('PracticeStage', studio);
 
   // Lights and gradient environment, as authored in public/scenes/main.iwsdk.scene.json.

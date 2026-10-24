@@ -11,13 +11,15 @@ import { SPECIMENS } from './specimens.js';
 import { Sfx } from './sfx.js';
 import { Trial, type Kind, type Prop } from './trial.js';
 import { ITEMS, SLOTS, type ItemId } from './items.js';
-import { composePlate, PLATE_W, SHOT_H } from './plate.js';
-import { T } from './i18n.js';
+import { composePlate, PLATE_W, SHOT_H, type PlateInfo } from './plate.js';
+import { composeReport } from './report.js';
+import { persona, REPORT_MIN_TRIALS } from './persona.js';
+import { LANG, T } from './i18n.js';
 import { haptic } from './platform.js';
 
 const PAPER = 0xf7f7f5;   // far floor, horizon and page; the light pool under the subject is brighter
 const STAGE = new Vector3(.7, 0, -2.8);
-const AVATARS = ['instructor', 'robot', 'croc'] as const;
+const AVATARS = ['instructor', 'robot', 'croc', 'gentleman'] as const;
 const KINDS: Kind[] = ['can', 'shuttle', 'balloon', 'flower'];   // tray slot order = trial log order
 const BLEND = .28;          // seconds to fade from one recording into another
 const TRIAL_HALF_WIDTH = .82;
@@ -34,7 +36,7 @@ const REACT = {
   flower: { clip: 3, key: 1.0, end: 4.4, flight: .6 },       // pinned just before the smug head-shake
 };
 const GLOAT = { clip: 3, start: 1.1, end: 4.4 };
-const CHEST_FRONT = [.12, .145, .175];   // chest-bone origin to shirt front, per subject
+const CHEST_FRONT = [.12, .145, .175, .15];   // chest-bone origin to shirt front, per subject
 // Flower spots on the chest (x toward his left, y down from the shoulder line): the lapel first,
 // where his smug hands never cover it.
 const PINS = [[.075, -.045], [-.07, -.06], [.02, -.15], [.1, -.17], [-.09, -.18], [-.01, -.03]];
@@ -97,6 +99,10 @@ export class TrialStage {
   private busy = false;
   private streak = 0;
   private readonly counts = [0, 0, 0, 0];
+  // The lab report: what was thrown, and each outcome's latest plate (shot at its best moment).
+  private readonly thrown = new Map<ItemId, number>();
+  private readonly reactionPlates: ({ shot: HTMLCanvasElement; info: PlateInfo } | null)[] = [null, null, null, null];
+  private pendingShot: { outcome: number; at: number } | null = null;
   private trials = 0;
   private breath = 0;
   private readonly points = Array.from({ length: 33 }, () => new Vector3());
@@ -126,10 +132,13 @@ export class TrialStage {
   private lastOutcome = -1;
   private readonly variant = [0, 0, 0, 0];   // which item each tray slot throws next
   private readonly size = new Vector2();
+  private readonly shotPose = new Vector3();
+  private readonly shotQuat = new Quaternion();
+  private readonly shotAim = new Vector3();
 
   constructor(private readonly host: StageHost) {
     // Three subjects share one rig and motion; only the selected one is shown and posed.
-    this.subjects = (['Instructor', 'Robot', 'Croc'] as const).map((node, i) => {
+    this.subjects = (['Instructor', 'Robot', 'Croc', 'Gentleman'] as const).map((node, i) => {
       const object = this.host.object(node);
       return { id: AVATARS[i], object, rig: new InstructorRig(object), hips: object.getObjectByName('Hips')! };
     });
@@ -389,6 +398,7 @@ export class TrialStage {
     haptic('light');
     this.busy = true; this.hud.setBusy(true);
     this.trials++;
+    this.thrown.set(item, (this.thrown.get(item) ?? 0) + 1);
     const s = this.subjects[this.subject], depth = CHEST_FRONT[this.subject];
     this.screenToWorld(x, y, 1.4, this.from);
     let clip: number, key: number, end: number, flight: number;
@@ -455,6 +465,8 @@ export class TrialStage {
         break;
     }
     this.lastOutcome = KINDS.indexOf(kind);
+    // Its plate is shot a beat later: mid-duck, at the kick, as the splash spreads, in the gloat.
+    this.pendingShot = { outcome: this.lastOutcome, at: this.clock + [.04, .08, .16, 1.1][this.lastOutcome] };
     this.hud.setLog(this.counts, this.trials, this.lastOutcome);
   }
 
@@ -465,33 +477,67 @@ export class TrialStage {
    */
   private async makePlate(): Promise<void> {
     if (!this.ready || this.presenting) return;
-    const r = this.host.renderer, camera = this.host.camera as PerspectiveCamera;
+    const shot = this.renderShot();
+    this.sfx.play('chime');
+    const cards = [await composePlate(shot, this.plateInfo(this.lastOutcome))];
+    if (this.trials >= REPORT_MIN_TRIALS) {
+      // The lab report: the personality first, then this moment, then a plate per outcome seen.
+      const p = persona(this.counts);
+      const [name, binomial, verdict] = T.personas[p];
+      // The card's portrait: the reaction that defines the personality, else this moment.
+      const lead = { dodge: 0, kick: 1, soak: 2, flatter: 3, carrot: 3, even: this.lastOutcome }[p];
+      const portrait = (lead >= 0 && this.reactionPlates[lead]?.shot) || shot;
+      // This moment only earns a plate of its own mid-reaction; at rest it repeats the others.
+      if (!this.busy) cards.length = 0;
+      let most: ItemId | null = null;
+      this.thrown.forEach((n, id) => { if (!most || n > this.thrown.get(most)!) most = id; });
+      const label = (id: ItemId) => { const slot = SLOTS.findIndex(s => s.includes(id)); return T.items[slot][SLOTS[slot].indexOf(id)][0]; };
+      cards.unshift(await composeReport(portrait, {
+        brand: T.brand, title: T.reportTitle, trial: `${T.trial} ${String(this.trials).padStart(3, '0')}`, kicker: T.reportKicker,
+        name, binomial, verdict, stamp: T.reportVerdict, labels: T.log, counts: this.counts,
+        mostLabel: T.mostThrown, most: most ? `${label(most)} ×${this.thrown.get(most)}` : '—',
+        subjectLabel: T.subjectLabel, subject: T.subjects[this.subject][0], site: T.site, zhText: LANG === 'zh',
+      }));
+      for (const plate of this.reactionPlates) if (plate) cards.push(await composePlate(plate.shot, plate.info));
+      this.hud.showPlate(cards, { persona: p, counts: [...this.counts], subject: this.subject });
+    } else this.hud.showPlate(cards, null);
+  }
+
+  /** The words for a plate of what is on screen now; `outcome` adds its count as a stamp. */
+  private plateInfo(outcome: number): PlateInfo {
+    return {
+      ...this.hud.plateText(), trial: `${T.trial} ${String(this.trials).padStart(3, '0')}`, site: T.site,
+      result: outcome >= 0 ? `${T.log[outcome]} · ${String(this.counts[outcome]).padStart(2, '0')}` : '',
+    };
+  }
+
+  /**
+   * Renders this instant at plate resolution, framed on the specimen. The renderer and camera
+   * are changed for one render inside this call and put back, so the screen never shows it.
+   */
+  private renderShot(): HTMLCanvasElement {
+    const r = this.host.renderer, camera = this.host.camera as PerspectiveCamera, player = this.host.player;
+    this.shotPose.copy(player.position); this.shotQuat.copy(camera.quaternion);
     const ratio = r.getPixelRatio(); r.getSize(this.size);
     const aspect = camera.aspect, fov = camera.fov;
     r.setPixelRatio(1); r.setSize(PLATE_W, SHOT_H, false);
     camera.aspect = PLATE_W / SHOT_H; camera.fov = 30; camera.updateProjectionMatrix();
     this.subjects[this.subject].hips.getWorldPosition(this.tmp);
     const height = 2.35, distance = height / 2 / Math.tan(15 * Math.PI / 180);
-    this.aim.set(this.tmp.x, 1.12, this.tmp.z);
+    this.shotAim.set(this.tmp.x, 1.12, this.tmp.z);
     this.host.player.position.set(
-      this.aim.x + Math.sin(this.azimuth) * distance * Math.cos(this.elevation),
-      this.aim.y + Math.sin(this.elevation) * distance,
-      this.aim.z + Math.cos(this.azimuth) * distance * Math.cos(this.elevation));
+      this.shotAim.x + Math.sin(this.azimuth) * distance * Math.cos(this.elevation),
+      this.shotAim.y + Math.sin(this.elevation) * distance,
+      this.shotAim.z + Math.cos(this.azimuth) * distance * Math.cos(this.elevation));
     this.host.player.updateMatrixWorld(true);
-    camera.position.set(0, 0, 0); camera.lookAt(this.aim);
+    camera.position.set(0, 0, 0); camera.lookAt(this.shotAim);
     r.render(this.host.scene, camera);
     const shot = document.createElement('canvas'); shot.width = PLATE_W; shot.height = SHOT_H;
     shot.getContext('2d')!.drawImage(r.domElement, 0, 0, PLATE_W, SHOT_H);
     r.setPixelRatio(ratio); r.setSize(this.size.x, this.size.y, false);
     camera.aspect = aspect; camera.fov = fov; camera.updateProjectionMatrix();
-    this.sfx.play('chime');
-    const text = this.hud.plateText();
-    const k = this.lastOutcome;
-    const card = await composePlate(shot, {
-      ...text, trial: `${T.trial} ${String(this.trials).padStart(3, '0')}`, site: T.site,
-      result: k >= 0 ? `${T.log[k]} · ${String(this.counts[k]).padStart(2, '0')}` : '',
-    });
-    this.hud.showPlate(card);
+    player.position.copy(this.shotPose); camera.quaternion.copy(this.shotQuat); player.updateMatrixWorld(true);
+    return shot;
   }
 
   /**
@@ -619,6 +665,11 @@ export class TrialStage {
     this.trial.update(delta);
     this.updateMarks();
     this.updateCamera(delta);
+    if (this.pendingShot && this.clock >= this.pendingShot.at) {
+      const k = this.pendingShot.outcome;
+      this.pendingShot = null;
+      this.reactionPlates[k] = { shot: this.renderShot(), info: this.plateInfo(k) };
+    }
   }
 
   private advance(delta: number): void {

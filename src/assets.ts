@@ -8,6 +8,7 @@ export default defineAssets({
   'pose-guide': { url: `${import.meta.env.BASE_URL}characters/instructor.glb`, type: AssetType.GLTF, name: 'Low-poly folk instructor' },
   'avatar-robot': { url: `${import.meta.env.BASE_URL}characters/robot.glb`, type: AssetType.GLTF, name: 'Humanoid robot avatar' },
   'avatar-croc': { url: `${import.meta.env.BASE_URL}characters/croc.glb`, type: AssetType.GLTF, name: 'Crocodile costume avatar' },
+  'avatar-gentleman': { url: `${import.meta.env.BASE_URL}characters/gentleman.glb`, type: AssetType.GLTF, name: 'Parisian gentleman avatar' },
   studio,
   'prop-soda-can': sodaCan,
   'prop-shuttlecock': shuttlecock,

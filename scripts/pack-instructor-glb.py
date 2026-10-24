@@ -33,8 +33,11 @@ def accessor(array, width, kind, component=5126, target=None):
 
 materials = {m['uuid']: i for i, m in enumerate(source['materials'])}
 for m in source['materials']:
-    gltf['materials'].append(dict(pbrMetallicRoughness=dict(baseColorFactor=m['color'] + [1],
-        roughnessFactor=m['roughness'], metallicFactor=m['metalness']), emissiveFactor=m['emissive']))
+    material = dict(pbrMetallicRoughness=dict(baseColorFactor=m['color'] + [1],
+        roughnessFactor=m['roughness'], metallicFactor=m['metalness']), emissiveFactor=m['emissive'])
+    if m.get('doubleSided'):
+        material['doubleSided'] = True   # e.g. hair with the face cut out: its inside shows
+    gltf['materials'].append(material)
 attributes = {'position': 'POSITION', 'normal': 'NORMAL', 'skinIndex': 'JOINTS_0', 'skinWeight': 'WEIGHTS_0'}
 geometry = {}
 for geo in source['geometries']:

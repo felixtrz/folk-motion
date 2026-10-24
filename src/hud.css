@@ -125,18 +125,8 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
   .subjects { margin-top: 2px; }
 }
 
-/* Phones: every pixel of height goes to the specimen. The subject switch moves into the
-   masthead (replacing the plate count, which the 01-04 index already shows); its tabs sit
-   on the masthead rule and their tap targets overhang to 44 px. */
-.mast-subjects { display: none; }
+/* Phones: every pixel of height goes to the specimen; the masthead keeps the trial count. */
 @media (max-width: 759px) {
-  .masthead [data-k="count"], .subjects { display: none; }
-  .mast-subjects { display: flex; pointer-events: auto; }
-  .mast-subjects button { position: relative; padding-left: 13px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-  .mast-subjects button::before { content: ''; position: absolute; top: -14px; right: 0; bottom: -12px; left: 2px; }
-  .mast-subjects button::after { content: ''; position: absolute; left: 13px; right: .1em; bottom: -10px; height: 2px; background: transparent; }
-  .mast-subjects button[aria-checked='true'] { color: var(--ink); }   /* the brand stays the only bold */
-  .mast-subjects button[aria-checked='true']::after { background: var(--ink); }
   .function { margin: 12px 0 8px; }
 }
 /* Phones with browser bars showing (most real visits): the classification moves to Notes
@@ -215,7 +205,7 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 .plate-sheet { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 2; background: rgba(247, 247, 245, .97); display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 16px var(--pad); padding-top: max(16px, var(--container-top, 0px), var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); padding-bottom: max(16px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); pointer-events: auto; opacity: 0; visibility: hidden; transition: opacity .3s, visibility .3s; }
 .plate-sheet[data-open='true'] { opacity: 1; visibility: visible; }
-.plate-sheet img { max-width: 100%; max-height: calc(100% - 150px); object-fit: contain; box-shadow: 0 18px 50px rgba(20, 20, 19, .16), 0 0 0 1px rgba(20, 20, 19, .08); background: var(--paper); -webkit-touch-callout: default; }
+.plate-sheet img { max-width: 92%; max-height: 100%; object-fit: contain; box-shadow: 0 18px 50px rgba(20, 20, 19, .16), 0 0 0 1px rgba(20, 20, 19, .08); background: var(--paper); -webkit-touch-callout: default; }
 .plate-sheet .hint { margin: 0; font-size: 10.5px; letter-spacing: .06em; color: var(--ink-3); }
 .plate-actions { display: flex; align-items: center; }
 .plate-actions > * { height: 44px; padding: 0 18px !important; border-radius: 22px; font-size: 11px !important; letter-spacing: .1em; text-transform: uppercase; display: inline-flex; align-items: center; border: 1px solid var(--rule) !important; color: var(--ink); text-decoration: none; }
@@ -251,7 +241,7 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
    fallback on every platform (iOS, Android, Windows) instead of whatever the system picks;
    small Chinese labels step up to a legible size with gentler tracking. */
 :lang(zh) .hud, :lang(zh) .plate-sheet { --mono: 'IBM Plex Mono', var(--zh-sans); }
-:lang(zh) .masthead, :lang(zh) .mast-subjects button, :lang(zh) .telemetry dt, :lang(zh) .function > .fn-head > span,
+:lang(zh) .masthead, :lang(zh) .subject-label, :lang(zh) .telemetry dt, :lang(zh) .function > .fn-head > span,
 :lang(zh) .foot-row .notes-toggle, :lang(zh) .foot-row .sound, :lang(zh) .plate-btn, :lang(zh) .sheet td:first-child {
   font-size: 12px !important; letter-spacing: .04em;
 }
@@ -262,7 +252,7 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
    plate is saved by long-press, and the hint says so prominently. */
 .in-app .plate-actions .share, .in-app .plate-actions .download { display: none; }
 .in-app .plate-sheet .hint { font-size: 13px; color: var(--ink); letter-spacing: .04em; }
-.in-app .plate-sheet img { max-height: calc(100% - 100px); }
+.in-app .plate-view { height: calc(100% - 150px); }
 
 /* Flex spacing as margins (flex gap needs Chrome 84; the container's floor is Chrome 61). */
 .masthead > * + * { margin-left: 14px; }
@@ -300,3 +290,48 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 .tray.returning .item { transition: transform .42s cubic-bezier(.2, .9, .25, 1.1) .18s, opacity .25s ease-out .18s; }
 :lang(zh) .tray .ask b { font-size: 16px; letter-spacing: .12em; }
 @media (prefers-reduced-motion: reduce) { .tray .ask button, .tray .ask b, .tray .ask span, .tray.asking .item, .tray.returning .item { transition: none !important; } }
+
+/* Lab report carousel: one card per slide, swiped (see Hud.bindCarousel). */
+.plate-view { width: 100%; height: calc(100% - 196px); overflow: hidden; touch-action: pan-y; flex: 0 0 auto; }
+.plate-track { display: flex; height: 100%; transition: transform .32s cubic-bezier(.2, .8, .25, 1); }
+.plate-slide img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
+.plate-slide { flex: 0 0 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 14px 0 22px; }
+.plate-dots { display: flex; justify-content: center; height: 10px; }
+.plate-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--rule); margin: 0 4px; transition: background .2s, transform .2s; }
+.plate-dots i.on { background: var(--ink); transform: scale(1.25); }
+.plate-sheet .plate-comment { margin-top: 12px; height: 40px; padding: 0 18px; border-radius: 20px; border: 1px dashed var(--ink-3); color: var(--ink); font-size: 13px; letter-spacing: .08em; }
+.plate-sheet .plate-comment[hidden] { display: none; }
+
+/* A challenge from the comments: their result, pinned above the panel until the first throw. */
+.hud-bottom > .challenge { position: absolute; left: var(--pad); right: var(--pad); bottom: 100%; margin-bottom: 8px; display: block; text-align: left; padding: 12px 14px; border: 1px solid var(--ink); border-radius: 12px; background: var(--paper); box-shadow: 0 10px 30px rgba(20, 20, 19, .12); animation: challenge-in .45s cubic-bezier(.2, .9, .25, 1.15); }
+.hud-bottom > .challenge[hidden] { display: none; }
+.challenge span, .challenge b { display: block; }
+.challenge .kicker { font-size: 10.5px; letter-spacing: .12em; color: #ff4d1a; text-transform: uppercase; }
+.challenge b { margin-top: 4px; font-size: 17px; font-weight: 600; }
+.challenge [data-k='challengeStats'] { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
+.challenge .you { margin-top: 6px; font-size: 12px; color: var(--ink); }
+@keyframes challenge-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Subjects: a field-guide label under the title, and arrows at the stage's edges, level with
+   the body (a swipe on the stage does the same). Nothing covers the specimen. */
+.subjects { display: none; }
+.subject-label { margin-top: 6px; font-size: 11px; letter-spacing: .08em; color: var(--ink-3); }
+.subject-label b { font-weight: 500; color: var(--ink); }
+.subject-label .of { font-variant-numeric: tabular-nums; }
+.hud > .arrow { position: absolute; top: 46%; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%; border: 1px solid var(--rule); background: rgba(247, 247, 245, .7); font-size: 22px; line-height: 36px; color: var(--ink-2); text-align: center; }
+.hud > .arrow.prev { left: 10px; }
+.hud > .arrow.next { right: 10px; }
+.hud > .arrow:active { background: var(--ink); color: var(--paper); }
+
+/* The score row; from the third throw it is the lab report's button: ink, a heading, a pop. */
+.report-cta { position: relative; margin: 0 0 10px; border-radius: 14px; transition: background .3s, padding .3s; }
+.report-cta .cta-head { display: none; }
+.report-cta .telemetry { margin: 0; }
+.report-cta.ready { pointer-events: auto; background: var(--ink); color: var(--paper); padding: 9px 14px 8px; cursor: pointer; animation: cta-in .5s cubic-bezier(.2, .9, .25, 1.2); }
+.report-cta.ready .cta-head { display: flex; justify-content: space-between; font-size: 15px; font-weight: 600; letter-spacing: .1em; margin-bottom: 4px; }
+.report-cta.ready .telemetry { border-color: transparent; padding: 2px 0 0; }
+.report-cta.ready dt { color: rgba(247, 247, 245, .6); }
+.report-cta.ready dd { color: var(--paper); font-size: 15px; }
+.report-cta.ready:active { transform: scale(.98); }
+@keyframes cta-in { 0% { transform: scale(.96); } 60% { transform: scale(1.02); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .report-cta.ready { animation: none; } }

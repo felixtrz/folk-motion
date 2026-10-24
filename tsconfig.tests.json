@@ -17,6 +17,7 @@
     "tests/**/*.ts",
     "src/hand-coach.ts",
     "src/lesson-flow.ts",
-    "src/motion.ts"
+    "src/motion.ts",
+    "src/persona.ts"
   ]
 }

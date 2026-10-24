@@ -7,6 +7,11 @@ import type { Specimen } from './specimens.js';
 import type { SpecimenStats } from './motion-stats.js';
 import { IN_APP, LANG, T } from './i18n.js';
 import { MINITOOL, has, loadValue, miniTool, saveValue } from './platform.js';
+import { REPORT_MIN_TRIALS, type Persona } from './persona.js';
+
+/** What a lab report was made from: travels with a comment as its challenge. */
+export type ReportMeta = { persona: Persona; counts: number[]; subject: number };
+const statLine = (counts: readonly number[]) => counts.map((n, i) => `${T.log[i]} ${n}`).join(' · ');
 import wordmarkUrl from './brand/elixr-games-black.svg?url';
 
 export type HudHandlers = {
@@ -30,8 +35,42 @@ const IMPRINT = MINITOOL
 const studioLink = (text: string) => MINITOOL ? text : `<a href="${STUDIO}" target="_blank" rel="noopener">${text}</a>`;
 const SOURCE = MINITOOL ? 'bilibili BV1YMaA6jEpK' : '<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>';
 // Line drawings of the throwables, drawn like specimen-plate figures: [slot][variant].
-const ASK_AFTER = 10;   // throws before the tray asks for a follow
+const ASK_AFTER = 5;    // throws before the tray asks for a follow
 const ASKED_KEY = 'fms-follow-ask';   // 'declined' or 'followed': the tray never asks again
+
+/**
+ * A comment's snapshot, if the tool was opened from one. The platform documents writing it but
+ * not where it comes back, so every launch source is searched for our own tagged object.
+ */
+async function findSnapshot(api: ReturnType<typeof miniTool>): Promise<ReportMeta | null> {
+  const search = (o: unknown, depth: number): ReportMeta | null => {
+    if (depth > 5 || o == null) return null;
+    if (typeof o === 'string') {
+      if (o.indexOf('fms') < 0) return null;
+      try { return search(JSON.parse(o), depth + 1); } catch {
+        try { return search(JSON.parse(decodeURIComponent(o)), depth + 1); } catch { return null; }
+      }
+    }
+    if (typeof o !== 'object') return null;
+    const v = o as { fms?: number; p?: Persona; c?: number[]; s?: number };
+    if (v.fms === 1 && typeof v.p === 'string' && Array.isArray(v.c) && v.c.length === 4) {
+      return { persona: v.p, counts: v.c.map(n => Math.max(0, Math.min(999, Number(n) || 0))), subject: Number(v.s) || 0 };
+    }
+    for (const key of Object.keys(o as object)) {
+      const hit = search((o as Record<string, unknown>)[key], depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const xhs = (window as unknown as { xhs?: { launchOptions?: unknown } }).xhs;
+  const params: string[] = [];
+  new URLSearchParams(location.search).forEach(v => params.push(v));
+  let hit = search(xhs && xhs.launchOptions, 0) || search(params, 0);
+  if (!hit && api && typeof api.getLaunchOptions === 'function') {
+    try { hit = search(await api.getLaunchOptions(), 0); } catch { /* not available */ }
+  }
+  return hit;
+}
 
 const ICONS = [
   [
@@ -72,16 +111,19 @@ export class Hud {
   private notesOpen = false;
   private soundOn: boolean;
   private gloss = '';
-  private plateFile: File | null = null;
+  private plateFiles: File[] = [];
+  private plateUrls: string[] = [];
+  private plateIndex = 0;
+  private report: ReportMeta | null = null;
   private busy = false;
   private readonly pendingFlips = new Map<number, number>();
   // The follow prompt: after ASK_AFTER throws the tray's card pairs merge into "follow" and
   // "decline" (once a session, only in the container, only if not already following).
   private trials = 0;
+  private subject = 0;
   private asked = false;
   private following = false;
   private follow: (() => Promise<boolean>) | null = null;
-  private plateUrl = '';
 
   constructor(private readonly specimens: readonly Specimen[], private readonly on: HudHandlers, soundOn: boolean) {
     this.soundOn = soundOn;
@@ -90,7 +132,7 @@ export class Hud {
     document.title = T.title;
     this.root.innerHTML = `
       <header class="hud-top">
-        <div class="masthead"><span><b>${T.brand}</b><span class="long"> · ${T.guide}</span></span><span data-k="count"></span><div class="mast-subjects" data-k="mastSubjects" role="radiogroup" aria-label="${T.subject}"></div></div>
+        <div class="masthead"><span><b>${T.brand}</b><span class="long"> · ${T.guide}</span></span><span data-k="count"></span></div>
         <div class="title fade">
           <div class="zh" data-k="zh" lang="zh"></div><div class="plate" data-k="plate"></div>
           <div class="binomial" data-k="binomial"></div>
@@ -98,13 +140,22 @@ export class Hud {
           <div class="class" data-k="legend"></div>
         </div>
         <div class="subjects" data-k="subjects" role="radiogroup" aria-label="${T.subject}"><span>${T.subject}</span></div>
+        <div class="subject-label"><span>${T.subjectLabel}</span> · <b data-k="subjectName"></b> <span class="of" data-k="subjectOf"></span></div>
       </header>
+      <button class="arrow prev" data-k="prevSubject" aria-label="${T.prevSubject}">‹</button>
+      <button class="arrow next" data-k="nextSubject" aria-label="${T.nextSubject}">›</button>
       <footer class="hud-bottom">
         <section class="measures" aria-label="${T.measurements}"><h3>${T.measurements}</h3><table><tbody data-k="measures"></tbody></table></section>
         <p class="function"><span class="fn-head"><span data-k="fnLabel"></span><button class="plate-btn" data-k="plateBtn">${T.savePlate} ↗</button></span><em class="fade" data-k="function"></em></p>
-        <dl class="telemetry log" aria-live="polite">
-          ${T.log.map((label, i) => `<div><dt>${label}</dt><dd data-k="log${i}">00</dd></div>`).join('')}
-        </dl>
+        <div class="report-cta" data-k="reportCta">
+          <span class="cta-head" aria-hidden="true"><span>${T.makeReport}</span><span>→</span></span>
+          <dl class="telemetry log" aria-live="polite">
+            ${T.log.map((label, i) => `<div><dt>${label}</dt><dd data-k="log${i}">00</dd></div>`).join('')}
+          </dl>
+        </div>
+        <button class="challenge" data-k="challenge" hidden>
+          <span class="kicker">${T.challengeFrom}</span><b data-k="challengeName"></b><span data-k="challengeStats"></span><span class="you">${T.challengeYou}</span>
+        </button>
         <nav class="tray" data-k="tray">
           ${T.items.map((_, i) => `<button class="item" data-i="${i}"></button>`).join('')}
           <div class="ask" data-k="ask" aria-hidden="true">
@@ -130,7 +181,8 @@ export class Hud {
         <button class="xr" data-k="xr" hidden>${T.xr}</button>
       </section>
       <section class="plate-sheet" data-k="plateSheet" aria-label="${T.savePlate}">
-        <img data-k="plateImg" alt="">
+        <div class="plate-view" data-k="plateView"><div class="plate-track" data-k="plateTrack"></div></div>
+        <div class="plate-dots" data-k="plateDots"></div>
         <p class="hint" data-k="plateHint">${MINITOOL ? '' : T.plateHint}</p>
         <div class="plate-actions">
           <button class="close" data-k="plateClose">${T.close}</button>
@@ -138,10 +190,11 @@ export class Hud {
             ? `<button class="save" data-k="plateSave">${T.saveAlbum}</button><button class="post" data-k="plateNote">${T.postNote} ↗</button>`
             : `<a class="download" data-k="plateDownload" download="folk-motion-plate.png">${T.download}</a><button class="share" data-k="plateShare">${T.share} ↗</button>`}
         </div>
+        ${MINITOOL ? `<button class="plate-comment" data-k="plateComment" hidden>${T.comment} ↗</button>` : ''}
       </section>`;
     this.root.querySelectorAll<HTMLElement>('[data-k]').forEach(node => { this.el[node.dataset.k!] = node; });
-    // The subject switch is drawn twice: a row under the title (desktop) and in the masthead (phones).
-    for (const group of [this.el.subjects, this.el.mastSubjects]) {
+    // The notes sheet lists the subjects; the stage switcher steps through them.
+    for (const group of [this.el.subjects]) {
       SUBJECTS.forEach(([label, title], i) => {
         const b = document.createElement('button');
         b.textContent = label; b.title = title; b.setAttribute('role', 'radio');
@@ -162,11 +215,16 @@ export class Hud {
     if (MINITOOL) this.bindContainer();
     else this.el.plateShare.addEventListener('click', () => {
       // Sharing needs a fresh tap, so the image is prepared before this button is pressed.
-      const file = this.plateFile;
-      if (file && navigator.canShare?.({ files: [file] })) void navigator.share({ files: [file], title: T.title }).catch(() => undefined);
+      const files = this.plateFiles;
+      if (files.length && navigator.canShare?.({ files })) void navigator.share({ files, title: T.title }).catch(() => undefined);
       else (this.el.plateDownload as HTMLAnchorElement).click();
     });
     this.el.sound.addEventListener('click', () => { this.soundOn = !this.soundOn; this.paintSound(); this.on.sound(this.soundOn); });
+    this.bindCarousel();
+    this.el.reportCta.addEventListener('click', () => { if (this.el.reportCta.classList.contains('ready')) this.on.plate(); });
+    this.el.prevSubject.addEventListener('click', () => this.on.subject((this.subject + SUBJECTS.length - 1) % SUBJECTS.length));
+    this.el.nextSubject.addEventListener('click', () => this.on.subject((this.subject + 1) % SUBJECTS.length));
+    this.el.challenge.addEventListener('click', () => { this.el.challenge.hidden = true; });
     this.paintSound();
     document.body.append(this.root);
   }
@@ -189,7 +247,10 @@ export class Hud {
   }
 
   showSubject(index: number): void {
-    for (const group of [this.el.subjects, this.el.mastSubjects]) {
+    this.subject = index;
+    this.text('subjectName', SUBJECTS[index][0]);
+    this.text('subjectOf', `${index + 1}/${SUBJECTS.length}`);
+    for (const group of [this.el.subjects]) {
       [...group.querySelectorAll('button')].forEach((b, i) => b.setAttribute('aria-checked', String(i === index)));
     }
   }
@@ -243,12 +304,21 @@ export class Hud {
   }
   /** The card just thrown stays inked while the specimen responds ("recording"). */
   setActive(index: number): void {
+    if (index >= 0) this.el.challenge.hidden = true;
     this.root.classList.remove('fresh');
     this.el.tray.querySelectorAll('.item').forEach((b, i) => b.classList.toggle('active', i === index));
   }
   /** Counts per outcome; `changed` flashes the one that just went up. */
   setLog(counts: readonly number[], trials: number, changed = -1): void {
     this.trials = trials;
+    // From the third throw the score row is the lab report's button (the small link retires).
+    const ready = trials >= REPORT_MIN_TRIALS;
+    if (ready !== this.el.reportCta.classList.contains('ready')) {
+      this.el.reportCta.classList.toggle('ready', ready);
+      this.el.reportCta.setAttribute('role', ready ? 'button' : '');
+      this.el.reportCta.tabIndex = ready ? 0 : -1;
+      this.el.plateBtn.hidden = ready;
+    }
     counts.forEach((n, i) => this.text(`log${i}`, String(n).padStart(2, '0')));
     this.text('count', `${T.trial} ${String(trials).padStart(3, '0')}`);
     if (changed >= 0) {
@@ -308,17 +378,70 @@ export class Hud {
       fnLabel: get('fnLabel'), fnText: get('function'), zhText: LANG === 'zh' };
   }
 
-  showPlate(card: HTMLCanvasElement): void {
-    if (this.plateUrl) URL.revokeObjectURL(this.plateUrl);
-    this.plateFile = null;
-    card.toBlob(blob => {
-      if (!blob) return;
-      this.plateFile = new File([blob], 'folk-motion-plate.png', { type: 'image/png' });
-      this.plateUrl = URL.createObjectURL(blob);
-      (this.el.plateImg as HTMLImageElement).src = this.plateUrl;
-      if (this.el.plateDownload) (this.el.plateDownload as HTMLAnchorElement).href = this.plateUrl;
+  /** Opens the sheet on `cards`: one plate, or a lab report (personality card, then plates). */
+  showPlate(cards: HTMLCanvasElement[], report: ReportMeta | null): void {
+    this.plateUrls.forEach(u => URL.revokeObjectURL(u));
+    this.plateUrls = []; this.plateFiles = []; this.report = report;
+    const blobs = cards.map(c => new Promise<Blob | null>(resolve => c.toBlob(resolve, 'image/png')));
+    void Promise.all(blobs).then(list => {
+      const ok = list.filter((b): b is Blob => !!b);
+      this.plateFiles = ok.map((b, i) => new File([b], `folk-motion-${i + 1}.png`, { type: 'image/png' }));
+      this.plateUrls = ok.map(b => URL.createObjectURL(b));
+      this.el.plateTrack.innerHTML = this.plateUrls.map(u => `<div class="plate-slide"><img src="${u}" alt="" draggable="false"></div>`).join('');
+      this.el.plateDots.innerHTML = this.plateUrls.length > 1 ? this.plateUrls.map(() => '<i></i>').join('') : '';
+      if (this.el.plateComment) this.el.plateComment.hidden = !report || !has('interactionOpenApi');
+      this.el.plateHint.textContent = MINITOOL ? '' : T.plateHint;
+      this.goTo(0);
       this.el.plateSheet.dataset.open = 'true';
-    }, 'image/png');
+    });
+  }
+
+  private goTo(index: number): void {
+    this.plateIndex = Math.max(0, Math.min(this.plateUrls.length - 1, index));
+    const track = this.el.plateTrack;
+    track.style.transition = ''; track.style.transform = `translateX(${-this.plateIndex * 100}%)`;
+    this.el.plateDots.querySelectorAll('i').forEach((d, i) => d.classList.toggle('on', i === this.plateIndex));
+    // The website's download link (the mini-tool has none, and must not carry one).
+    if (!MINITOOL && this.el.plateDownload) {
+      const a = this.el.plateDownload as HTMLAnchorElement;
+      a.href = this.plateUrls[this.plateIndex] ?? ''; a.download = `folk-motion-${this.plateIndex + 1}.png`;
+    }
+  }
+
+  /** Swipe between the report's cards (no scroll-snap: the container's floor is Chrome 61). */
+  private bindCarousel(): void {
+    const view = this.el.plateView, track = this.el.plateTrack;
+    let x0 = -1, dx = 0;
+    view.addEventListener('pointerdown', e => {
+      if (this.plateUrls.length < 2) return;
+      x0 = e.clientX; dx = 0; track.style.transition = 'none';
+      try { view.setPointerCapture(e.pointerId); } catch { /* the swipe still works without capture */ }
+    });
+    view.addEventListener('pointermove', e => {
+      if (x0 < 0) return;
+      dx = e.clientX - x0;
+      track.style.transform = `translateX(calc(${-this.plateIndex * 100}% + ${dx}px))`;
+    });
+    const end = () => {
+      if (x0 < 0) return;
+      x0 = -1;
+      this.goTo(this.plateIndex + (dx < -40 ? 1 : dx > 40 ? -1 : 0));
+    };
+    view.addEventListener('pointerup', end); view.addEventListener('pointercancel', end);
+    this.el.plateDots.addEventListener('click', e => {
+      const i = [...this.el.plateDots.children].indexOf(e.target as Element);
+      if (i >= 0) this.goTo(i);
+    });
+  }
+
+  /** Someone opened the tool from a comment carrying a lab report: show their result. */
+  showChallenge(meta: ReportMeta): void {
+    const p = T.personas[meta.persona];
+    if (!p) return;
+    this.el.challengeName.textContent = `${T.challengeWas}「${p[0]}」`;
+    this.el.challengeStats.textContent = statLine(meta.counts);
+    this.el.challenge.hidden = false;
+    if (meta.subject >= 0 && meta.subject < SUBJECTS.length) this.on.subject(meta.subject);
   }
   closePlate(): void { this.el.plateSheet.dataset.open = 'false'; }
 
@@ -331,8 +454,8 @@ export class Hud {
   private bindContainer(): void {
     const api = miniTool();
     const say = (text: string) => { this.el.plateHint.textContent = text; };
-    const tempFile = async (): Promise<string> => {
-      const img = this.el.plateImg as HTMLImageElement;
+    const tempFile = async (index = this.plateIndex): Promise<string> => {
+      const img = this.el.plateTrack.querySelectorAll('img')[index] as HTMLImageElement;
       const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
       c.getContext('2d')!.drawImage(img, 0, 0);
       const data = c.toDataURL('image/jpeg', .92);
@@ -346,9 +469,33 @@ export class Hud {
     this.el.plateNote.addEventListener('click', async () => {
       if (!api || typeof api.postNote !== 'function') { say(T.failed); return; }
       try {
-        await api.postNote({ title: T.noteTitle, content: T.noteContent, pageType: 'photo_publish', mediaInfo: { image_resources: [{ url: await tempFile() }] } });
+        // A lab report posts as one carousel note, the personality card first.
+        const urls: { url: string }[] = [];
+        for (let i = 0; i < this.plateUrls.length; i++) urls.push({ url: await tempFile(i) });
+        const r = this.report, p = r ? T.personas[r.persona] : null;
+        await api.postNote(r && p
+          ? { title: T.noteReportTitle(p[0]), content: `${T.shareText(p[0], statLine(r.counts))}\n${p[2]}\n${T.noteContent}`, pageType: 'photo_publish', mediaInfo: { image_resources: urls } }
+          : { title: T.noteTitle, content: T.noteContent, pageType: 'photo_publish', mediaInfo: { image_resources: urls.slice(this.plateIndex, this.plateIndex + 1) } });
       } catch { say(T.failed); }
     });
+    // The comment challenge (9.49+): the personality card and its numbers go into the comment
+    // section; the report rides along as the comment's snapshot, for whoever opens it.
+    this.el.plateComment.addEventListener('click', async () => {
+      const r = this.report;
+      if (!r || !api || typeof api.interactionOpenApi !== 'function' || typeof api.writeTempFile !== 'function') { say(T.failed); return; }
+      try {
+        const p = T.personas[r.persona];
+        await api.interactionOpenApi({
+          payload: {
+            action: 'post_comment', content: T.shareText(p[0], statLine(r.counts)),
+            media_bean: [{ media_type: 'image', cover_image_url: await tempFile(0) }],
+            miniToolSnapshotInfo: JSON.stringify({ fms: 1, p: r.persona, c: r.counts, s: r.subject }),
+          },
+          saveToAlbum: false,
+        });
+      } catch { say(T.failed); }
+    });
+    void findSnapshot(api).then(meta => { if (meta) this.showChallenge(meta); });
     if (has('followAuthor')) {
       const button = this.el.follow as HTMLButtonElement;
       const paint = (status: unknown) => {
@@ -392,5 +539,5 @@ export class Hud {
     if (this.last.get(key) === value) return;
     this.el[key].textContent = value; this.last.set(key, value);
   }
-  dispose(): void { if (this.plateUrl) URL.revokeObjectURL(this.plateUrl); this.root.remove(); }
+  dispose(): void { this.plateUrls.forEach(u => URL.revokeObjectURL(u)); this.root.remove(); }
 }

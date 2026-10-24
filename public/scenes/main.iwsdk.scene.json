@@ -81,6 +81,23 @@
       }
     },
     {
+      "id": "Gentleman",
+      "name": "Gentleman",
+      "content": {
+        "type": "asset",
+        "asset": "avatar-gentleman",
+        "castShadow": false,
+        "receiveShadow": false
+      },
+      "transform": {
+        "position": [
+          0.7,
+          0,
+          -2.8
+        ]
+      }
+    },
+    {
       "id": "Robot",
       "name": "Robot",
       "content": {
