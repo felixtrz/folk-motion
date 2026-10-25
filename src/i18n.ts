@@ -1,5 +1,8 @@
 import { MINITOOL } from './platform.js';
 
+// Plates name the website; inside Xiaohongshu they carry no outside address (platform rules).
+const SITE = MINITOOL ? '' : 'fm.elixr.games';
+
 /** Interface language: Chinese for Chinese-language browsers, English for everyone else.
  *  `?lang=zh` or `?lang=en` overrides the browser. */
 export type Lang = 'zh' | 'en';
@@ -38,11 +41,11 @@ const STRINGS = {
       [['Flower', 'Award a red paper flower'], ['Medal', 'Award a gold medal'], ['Hongbao', 'Give a red envelope'], ['Pennant', 'Present a silk pennant'], ['Gold star', 'Award a gold star']],
     ],
     log: ['Dodged', 'Returned', 'Soaked', 'Flattered'], sound: 'Sound',
-    savePlate: 'Save plate', share: 'Share', download: 'Download', plateHint: 'Long-press the image to save it.', site: 'fm.elixr.games',
+    savePlate: 'Save plate', share: 'Share', download: 'Download', plateHint: 'Long-press the image to save it.', site: SITE,
     saveAlbum: 'Save to album', postNote: 'Post a note', saved: 'Saved to your album', follow: '+ Follow the author', followed: 'Following ✓',
-    askFollow: 'Follow the author', askFollowSub: 'Encourage the researcher', askNo: 'Cruelly decline', askNoSub: 'Keep throwing', askThanks: 'Encouragement received',
+    askQuestion: 'Enjoying the experiment?', askFollow: 'Follow the author', askFollowSub: 'Encourage the researcher', askNo: 'Cruelly decline', askNoSub: 'Keep throwing', askThanks: 'Encouragement received',
     // The lab report: a personality card plus plates. [name, Latin binomial, verdict].
-    report: 'Lab report', makeReport: 'Make lab report', prevSubject: 'Previous subject', nextSubject: 'Next subject', reportKicker: 'Your throwing personality', reportTitle: 'Examiner assessment', reportVerdict: 'Assessment complete',
+    report: 'Lab report', generating: 'Developing the plates…', makeReport: 'Make lab report', prevSubject: 'Previous subject', nextSubject: 'Next subject', reportKicker: 'Your throwing personality', reportTitle: 'Examiner assessment', reportVerdict: 'Assessment complete',
     mostThrown: 'Most thrown', subjectLabel: 'Subject', plates: 'plates', comment: 'Post to comments · challenge',
     personas: {
       dodge: ['The Slipper Heir', 'Iaculator maternus', 'Fast hands, poor aim. Every projectile was dodged.'],
@@ -76,10 +79,10 @@ const STRINGS = {
       [['小红花', '奖励一朵小红花'], ['金牌', '颁发一枚金牌'], ['红包', '发一个红包'], ['锦旗', '送一面锦旗'], ['金星', '奖励一颗金星']],
     ],
     log: ['闪避', '踢回', '湿透', '得意'], sound: '声音',
-    savePlate: '生成图版', share: '分享', download: '下载', plateHint: '长按图片 · 保存到相册', site: 'fm.elixr.games',
+    savePlate: '生成图版', share: '分享', download: '下载', plateHint: '长按图片 · 保存到相册', site: SITE,
     saveAlbum: '保存到相册', postNote: '发笔记', saved: '已保存到相册', follow: '＋ 关注作者', followed: '已关注 ✓',
-    askFollow: '关注作者', askFollowSub: '给研究员一点鼓励', askNo: '残忍拒绝', askNoSub: '继续扔', askThanks: '研究员已收到鼓励',
-    report: '实验报告', makeReport: '生成实验报告', prevSubject: '上一个实验对象', nextSubject: '下一个实验对象', reportKicker: '你的扔东西人格', reportTitle: '实验员鉴定', reportVerdict: '鉴定完毕',
+    askQuestion: '喜欢这个实验？', askFollow: '关注作者', askFollowSub: '给研究员一点鼓励', askNo: '残忍拒绝', askNoSub: '继续扔', askThanks: '研究员已收到鼓励',
+    report: '实验报告', generating: '正在冲洗图版…', makeReport: '生成实验报告', prevSubject: '上一个实验对象', nextSubject: '下一个实验对象', reportKicker: '你的扔东西人格', reportTitle: '实验员鉴定', reportVerdict: '鉴定完毕',
     mostThrown: '最常扔', subjectLabel: '实验对象', plates: '张', comment: '晒到评论区 · 发起挑战',
     personas: {
       dodge: ['拖鞋传承人', 'Iaculator maternus', '下手快，准头差。所有投掷物均被成功闪避。'],

@@ -1,6 +1,6 @@
 import {
   CanvasTexture, Color, DirectionalLight, Vector2, SRGBColorSpace, Fog, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera,
-  Quaternion, Vector3, Euler, type Scene, type WebGLRenderer,
+  Quaternion, Vector3, Euler, WebGLRenderTarget, type Scene, type WebGLRenderer,
 } from '@iwsdk/core';
 import { ContactShadow } from './contact-shadow.js';
 import { Hud } from './hud.js';
@@ -14,6 +14,7 @@ import { ITEMS, SLOTS, type ItemId } from './items.js';
 import { composePlate, PLATE_W, SHOT_H, type PlateInfo } from './plate.js';
 import { composeReport } from './report.js';
 import { persona, REPORT_MIN_TRIALS } from './persona.js';
+import { FEATURES } from './features.js';
 import { LANG, T } from './i18n.js';
 import { haptic } from './platform.js';
 
@@ -135,6 +136,9 @@ export class TrialStage {
   private readonly shotPose = new Vector3();
   private readonly shotQuat = new Quaternion();
   private readonly shotAim = new Vector3();
+  private shotTarget: WebGLRenderTarget | null = null;
+  private shotPixels: Uint8Array | null = null;
+  private plating = false;
 
   constructor(private readonly host: StageHost) {
     // Three subjects share one rig and motion; only the selected one is shown and posed.
@@ -466,7 +470,7 @@ export class TrialStage {
     }
     this.lastOutcome = KINDS.indexOf(kind);
     // Its plate is shot a beat later: mid-duck, at the kick, as the splash spreads, in the gloat.
-    this.pendingShot = { outcome: this.lastOutcome, at: this.clock + [.04, .08, .16, 1.1][this.lastOutcome] };
+    if (FEATURES.report) this.pendingShot = { outcome: this.lastOutcome, at: this.clock + [.04, .08, .16, 1.1][this.lastOutcome] };
     this.hud.setLog(this.counts, this.trials, this.lastOutcome);
   }
 
@@ -476,11 +480,19 @@ export class TrialStage {
    * screen never shows it.
    */
   private async makePlate(): Promise<void> {
-    if (!this.ready || this.presenting) return;
+    if (!this.ready || this.presenting || this.plating) return;   // a second tap while it works is ignored
+    this.plating = true;
+    try { await this.composeCards(); } finally { this.plating = false; }
+  }
+
+  private async composeCards(): Promise<void> {
+    // The sheet opens at once ("generating…"); the cards fill it when composed.
+    this.hud.showGenerating();
+    await new Promise(resolve => setTimeout(resolve, 30));   // let the sheet paint first
     const shot = this.renderShot();
     this.sfx.play('chime');
     const cards = [await composePlate(shot, this.plateInfo(this.lastOutcome))];
-    if (this.trials >= REPORT_MIN_TRIALS) {
+    if (FEATURES.report && this.trials >= REPORT_MIN_TRIALS) {
       // The lab report: the personality first, then this moment, then a plate per outcome seen.
       const p = persona(this.counts);
       const [name, binomial, verdict] = T.personas[p];
@@ -512,15 +524,15 @@ export class TrialStage {
   }
 
   /**
-   * Renders this instant at plate resolution, framed on the specimen. The renderer and camera
-   * are changed for one render inside this call and put back, so the screen never shows it.
+   * Renders this instant at plate resolution, framed on the specimen, into a fixed off-screen
+   * target that is made once and reused. The visible canvas is never resized: reallocating its
+   * drawing buffer on every reaction is what makes weak devices drop the WebGL context.
    */
   private renderShot(): HTMLCanvasElement {
     const r = this.host.renderer, camera = this.host.camera as PerspectiveCamera, player = this.host.player;
     this.shotPose.copy(player.position); this.shotQuat.copy(camera.quaternion);
-    const ratio = r.getPixelRatio(); r.getSize(this.size);
     const aspect = camera.aspect, fov = camera.fov;
-    r.setPixelRatio(1); r.setSize(PLATE_W, SHOT_H, false);
+    const target = this.shotTarget = this.shotTarget || new WebGLRenderTarget(PLATE_W, SHOT_H, { samples: 4, colorSpace: SRGBColorSpace });
     camera.aspect = PLATE_W / SHOT_H; camera.fov = 30; camera.updateProjectionMatrix();
     this.subjects[this.subject].hips.getWorldPosition(this.tmp);
     const height = 2.35, distance = height / 2 / Math.tan(15 * Math.PI / 180);
@@ -531,10 +543,17 @@ export class TrialStage {
       this.shotAim.z + Math.cos(this.azimuth) * distance * Math.cos(this.elevation));
     this.host.player.updateMatrixWorld(true);
     camera.position.set(0, 0, 0); camera.lookAt(this.shotAim);
+    const previous = r.getRenderTarget();
+    r.setRenderTarget(target);
     r.render(this.host.scene, camera);
+    const pixels = this.shotPixels = this.shotPixels || new Uint8Array(PLATE_W * SHOT_H * 4);
+    r.readRenderTargetPixels(target, 0, 0, PLATE_W, SHOT_H, pixels);
+    r.setRenderTarget(previous);
+    // GL rows run bottom-up; the canvas wants them top-down.
     const shot = document.createElement('canvas'); shot.width = PLATE_W; shot.height = SHOT_H;
-    shot.getContext('2d')!.drawImage(r.domElement, 0, 0, PLATE_W, SHOT_H);
-    r.setPixelRatio(ratio); r.setSize(this.size.x, this.size.y, false);
+    const g = shot.getContext('2d')!, image = g.createImageData(PLATE_W, SHOT_H), row = PLATE_W * 4;
+    for (let y = 0; y < SHOT_H; y++) image.data.set(pixels.subarray((SHOT_H - 1 - y) * row, (SHOT_H - y) * row), y * row);
+    g.putImageData(image, 0, 0);
     camera.aspect = aspect; camera.fov = fov; camera.updateProjectionMatrix();
     player.position.copy(this.shotPose); camera.quaternion.copy(this.shotQuat); player.updateMatrixWorld(true);
     return shot;

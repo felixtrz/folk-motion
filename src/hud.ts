@@ -8,6 +8,7 @@ import type { SpecimenStats } from './motion-stats.js';
 import { IN_APP, LANG, T } from './i18n.js';
 import { MINITOOL, has, loadValue, miniTool, saveValue } from './platform.js';
 import { REPORT_MIN_TRIALS, type Persona } from './persona.js';
+import { FEATURES } from './features.js';
 
 /** What a lab report was made from: travels with a comment as its challenge. */
 export type ReportMeta = { persona: Persona; counts: number[]; subject: number };
@@ -35,7 +36,10 @@ const IMPRINT = MINITOOL
 const studioLink = (text: string) => MINITOOL ? text : `<a href="${STUDIO}" target="_blank" rel="noopener">${text}</a>`;
 const SOURCE = MINITOOL ? 'bilibili BV1YMaA6jEpK' : '<a href="https://www.bilibili.com/video/BV1YMaA6jEpK/" target="_blank" rel="noopener">bilibili BV1YMaA6jEpK</a>';
 // Line drawings of the throwables, drawn like specimen-plate figures: [slot][variant].
-const ASK_AFTER = 5;    // throws before the tray asks for a follow
+// The comment challenge closes the tool to open the comments (container behaviour); review
+// tests the tool outside any note, where that reads as a dead button. Off until it is cleared.
+const COMMENT_CHALLENGE = false;
+const ASK_AFTER = 10;   // throws before the follow card appears
 const ASKED_KEY = 'fms-follow-ask';   // 'declined' or 'followed': the tray never asks again
 
 /**
@@ -117,7 +121,7 @@ export class Hud {
   private report: ReportMeta | null = null;
   private busy = false;
   private readonly pendingFlips = new Map<number, number>();
-  // The follow prompt: after ASK_AFTER throws the tray's card pairs merge into "follow" and
+  // The follow prompt: after ASK_AFTER throws a small card above the tray offers "follow" or
   // "decline" (once a session, only in the container, only if not already following).
   private trials = 0;
   private subject = 0;
@@ -156,12 +160,13 @@ export class Hud {
         <button class="challenge" data-k="challenge" hidden>
           <span class="kicker">${T.challengeFrom}</span><b data-k="challengeName"></b><span data-k="challengeStats"></span><span class="you">${T.challengeYou}</span>
         </button>
+        <div class="ask" data-k="ask" aria-hidden="true" hidden>
+          <span class="ask-q">${T.askQuestion}</span>
+          <button class="yes" data-k="askYes" tabindex="-1"><b data-k="askYesText">${T.askFollow}</b></button>
+          <button class="no" data-k="askNo" tabindex="-1"><b>${T.askNo}</b></button>
+        </div>
         <nav class="tray" data-k="tray">
           ${T.items.map((_, i) => `<button class="item" data-i="${i}"></button>`).join('')}
-          <div class="ask" data-k="ask" aria-hidden="true">
-            <button class="yes" data-k="askYes" tabindex="-1"><b data-k="askYesText">${T.askFollow}</b><span data-k="askYesSub">${T.askFollowSub}</span></button>
-            <button class="no" data-k="askNo" tabindex="-1"><b>${T.askNo}</b><span>${T.askNoSub}</span></button>
-          </div>
         </nav>
         <div class="foot-row">
           <button class="notes-toggle" data-k="notesToggle" aria-expanded="false">${T.notesButton}</button>
@@ -270,16 +275,13 @@ export class Hud {
     }
   }
 
+  /** The follow card sits above the tray and never blocks it: throwing carries on regardless. */
   private ask(on: boolean): void {
-    const tray = this.el.tray;
-    tray.classList.toggle('asking', on);
-    this.el.ask.setAttribute('aria-hidden', String(!on));
+    const card = this.el.ask;
+    card.setAttribute('aria-hidden', String(!on));
     for (const k of ['askYes', 'askNo']) this.el[k].tabIndex = on ? 0 : -1;
-    if (!on) {
-      // The cards slide back out of the merged buttons; 'returning' carries the slower timing.
-      tray.classList.add('returning');
-      setTimeout(() => tray.classList.remove('returning'), 700);
-    }
+    if (on) { card.hidden = false; void card.offsetWidth; card.classList.add('open'); }
+    else { card.classList.remove('open'); setTimeout(() => { if (!card.classList.contains('open')) card.hidden = true; }, 300); }
   }
 
   /** Shows the next thing in a slot's family (flips when the specimen is free again). */
@@ -312,7 +314,7 @@ export class Hud {
   setLog(counts: readonly number[], trials: number, changed = -1): void {
     this.trials = trials;
     // From the third throw the score row is the lab report's button (the small link retires).
-    const ready = trials >= REPORT_MIN_TRIALS;
+    const ready = FEATURES.report && trials >= REPORT_MIN_TRIALS;
     if (ready !== this.el.reportCta.classList.contains('ready')) {
       this.el.reportCta.classList.toggle('ready', ready);
       this.el.reportCta.setAttribute('role', ready ? 'button' : '');
@@ -380,6 +382,18 @@ export class Hud {
       fnLabel: get('fnLabel'), fnText: get('function'), zhText: LANG === 'zh' };
   }
 
+  /** Opens the sheet at once while the cards are composed, so the tap always answers. */
+  showGenerating(): void {
+    this.el.plateTrack.innerHTML = `<div class="plate-slide"><p class="generating">${T.generating}</p></div>`;
+    this.el.plateDots.innerHTML = '';
+    this.el.plateHint.textContent = '';
+    if (this.el.plateComment) this.el.plateComment.hidden = true;
+    this.plateUrls.forEach(u => URL.revokeObjectURL(u));
+    this.plateUrls = []; this.plateFiles = [];
+    this.goTo(0);
+    this.el.plateSheet.dataset.open = 'true';
+  }
+
   /** Opens the sheet on `cards`: one plate, or a lab report (personality card, then plates). */
   showPlate(cards: HTMLCanvasElement[], report: ReportMeta | null): void {
     this.plateUrls.forEach(u => URL.revokeObjectURL(u));
@@ -391,7 +405,7 @@ export class Hud {
       this.plateUrls = ok.map(b => URL.createObjectURL(b));
       this.el.plateTrack.innerHTML = this.plateUrls.map(u => `<div class="plate-slide"><img src="${u}" alt="" draggable="false"></div>`).join('');
       this.el.plateDots.innerHTML = this.plateUrls.length > 1 ? this.plateUrls.map(() => '<i></i>').join('') : '';
-      if (this.el.plateComment) this.el.plateComment.hidden = !report || !has('interactionOpenApi');
+      if (this.el.plateComment) this.el.plateComment.hidden = !COMMENT_CHALLENGE || !report || !has('interactionOpenApi');
       this.el.plateHint.textContent = MINITOOL ? '' : T.plateHint;
       this.goTo(0);
       this.el.plateSheet.dataset.open = 'true';
@@ -465,10 +479,12 @@ export class Hud {
       return data;
     };
     this.el.plateSave.addEventListener('click', async () => {
+      if (!this.plateUrls.length) return;   // still composing
       if (!api || typeof api.saveImageToPhotosAlbum !== 'function') { say(T.failed); return; }
       try { await api.saveImageToPhotosAlbum({ filePath: await tempFile() }); say(T.saved); } catch { say(T.failed); }
     });
     this.el.plateNote.addEventListener('click', async () => {
+      if (!this.plateUrls.length) return;   // still composing
       if (!api || typeof api.postNote !== 'function') { say(T.failed); return; }
       try {
         // A lab report posts as one carousel note, the personality card first.
@@ -517,7 +533,7 @@ export class Hud {
           settle(on ? 'followed' : 'declined');
           if (!on) { this.ask(false); return; }
           // A beat of thanks on the button itself, then the cards come back.
-          this.el.askYesText.textContent = T.followed; this.el.askYesSub.textContent = T.askThanks; this.el.askYes.classList.add('done');
+          this.el.askYesText.textContent = T.followed; this.el.askYes.classList.add('done');
           setTimeout(() => this.ask(false), 1100);
         });
       });

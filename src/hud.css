@@ -267,29 +267,19 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 :lang(zh) .foot-row .follow { font-size: 14px; letter-spacing: .1em; font-weight: 600; }
 .plate-actions .save { background: var(--paper) !important; }
 
-/* Follow prompt: each pair of cards slides together and fades while a wide button grows out
-   of the pair's middle; the labels arrive last. 'returning' plays it back. */
-.tray { position: relative; }
-.tray .ask { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: 1fr 1fr; grid-gap: 8px; pointer-events: none; visibility: hidden; transition: visibility 0s .45s; }
-.tray .ask button { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 14px; opacity: 0; transform: scaleX(.46); transition: transform .26s cubic-bezier(.5, 0, .75, 0), opacity .2s ease-in .06s; }
-.tray .ask b { font-size: 15px; font-weight: 600; letter-spacing: .06em; }
-.tray .ask span { margin-top: 5px; font-size: 10.5px; letter-spacing: .04em; opacity: .7; }
-.tray .ask b, .tray .ask span { opacity: 0; transition: opacity .12s; white-space: nowrap; }
-.tray .ask .yes { background: var(--ink); color: var(--paper); }
-.tray .ask .no { border: 1px solid var(--rule); background: rgba(255, 255, 255, .55); color: var(--ink); }
-.tray .ask button:active { transform: scale(.97); }
-.tray .ask .yes.done { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); transition: background .25s, color .25s; }
-.tray.asking .ask { pointer-events: auto; visibility: visible; transition: visibility 0s; }
-.tray.asking .ask button { opacity: 1; transform: none; transition: transform .46s cubic-bezier(.2, .9, .25, 1.12) .16s, opacity .18s ease-out .16s; }
-.tray.asking .ask .no { transition-delay: .22s; }
-.tray.asking .ask b, .tray.asking .ask span { opacity: 1; transition: opacity .25s ease-out .42s; }
-.tray.asking .ask span { opacity: .7; }
-.tray.asking .item { pointer-events: none; opacity: 0; transition: transform .3s cubic-bezier(.5, 0, .2, 1), opacity .22s ease-in .08s; }
-.tray.asking .item:nth-child(odd) { transform: translateX(calc(50% + 4px)) scale(.94); }
-.tray.asking .item:nth-child(even) { transform: translateX(calc(-50% - 4px)) scale(.94); }
-.tray.returning .item { transition: transform .42s cubic-bezier(.2, .9, .25, 1.1) .18s, opacity .25s ease-out .18s; }
-:lang(zh) .tray .ask b { font-size: 16px; letter-spacing: .12em; }
-@media (prefers-reduced-motion: reduce) { .tray .ask button, .tray .ask b, .tray .ask span, .tray.asking .item, .tray.returning .item { transition: none !important; } }
+/* Follow card: one compact row above the panel, offered once after ASK_AFTER throws. It never
+   covers or disables the tray: throwing carries on whatever the viewer does with it. */
+.hud-bottom > .ask { position: absolute; left: var(--pad); right: var(--pad); bottom: 100%; margin-bottom: 8px; display: flex; align-items: center; padding: 8px 8px 8px 14px; border: 1px solid var(--ink); border-radius: 14px; background: var(--paper); box-shadow: 0 10px 30px rgba(20, 20, 19, .12); opacity: 0; transform: translateY(10px); transition: opacity .25s, transform .3s cubic-bezier(.2, .9, .25, 1.15); }
+.hud-bottom > .ask[hidden] { display: none; }
+.hud-bottom > .ask.open { opacity: 1; transform: none; }
+.ask .ask-q { flex: 1; font-size: 13px; color: var(--ink); }
+.ask button { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 13px; }
+.ask button + button { margin-left: 6px; }
+.ask .yes { background: var(--ink); color: var(--paper); }
+.ask .no { border: 1px solid var(--rule); color: var(--ink-2); }
+.ask .yes.done { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.ask b { font-weight: 600; letter-spacing: .06em; }
+@media (prefers-reduced-motion: reduce) { .hud-bottom > .ask { transition: none; } }
 
 /* Lab report carousel: one card per slide, swiped (see Hud.bindCarousel). */
 .plate-view { width: 100%; height: calc(100% - 196px); overflow: hidden; touch-action: pan-y; flex: 0 0 auto; }
@@ -335,3 +325,5 @@ body { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transpa
 .report-cta.ready:active { transform: scale(.98); }
 @keyframes cta-in { 0% { transform: scale(.96); } 60% { transform: scale(1.02); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .report-cta.ready { animation: none; } }
+.plate-sheet .generating { margin: 0; font-size: 14px; letter-spacing: .1em; color: var(--ink-2); animation: generating 1.2s ease-in-out infinite alternate; }
+@keyframes generating { from { opacity: .35; } to { opacity: 1; } }
